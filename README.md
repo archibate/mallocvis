@@ -20,7 +20,7 @@ mallocvis的工作原理是通过hook C/C++中的内存分配函数，如malloc�
 LD_PRELOAD=libmallocvis.so ./program
 ```
 
-运行后，将会在当前目录下生成 `malloc.html` 文件，用浏览器打开即可查看可视化结果。
+运行后，将会在当前目录（或 build 目录）下生成 `malloc.html` 文件，用浏览器打开即可查看可视化结果。
 
 使用鼠标拖拽可以移动，滚轮缩放，双击恢复原始大小。
 
@@ -46,6 +46,6 @@ You can use the LD_PRELOAD environment variable to force the user program to loa
 LD_PRELOAD=libmallocvis.so ./program
 ```
 
-After running, a `malloc.html` file will be generated in the current directory, which can be opened in a browser to view the visualization results.
+After running, a `malloc.html` file will be generated in the current directory (or the build directory), which can be opened in a browser to view the visualization results.
 
 You can use the mouse to drag and drop to move, scroll to zoom, and double-click to restore the original size.
