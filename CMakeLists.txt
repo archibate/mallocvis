@@ -11,19 +11,19 @@ add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-Wall$<SEMICOLON>-Wextra$<SEM
 
 add_library(mallocvis SHARED hook.cpp plot.cpp)
 
-add_executable(main main.cpp)
-target_link_libraries(main PRIVATE mallocvis)
+add_executable(example example.cpp)
+target_link_libraries(example PRIVATE mallocvis)
 
 find_package(tsl-robin-map)
 if (tsl-robin-map_FOUND)
-    target_link_libraries(main PRIVATE tsl::robin_map)
-    target_compile_definitions(main PRIVATE -DHAS_TSL)
+    target_link_libraries(example PRIVATE tsl::robin_map)
+    target_compile_definitions(example PRIVATE -DHAS_TSL)
 endif()
 
 find_package(absl)
 if (absl_FOUND)
-    target_link_libraries(main PRIVATE absl::flat_hash_set absl::node_hash_set)
-    target_compile_definitions(main PRIVATE -DHAS_ABSL)
+    target_link_libraries(example PRIVATE absl::flat_hash_set absl::node_hash_set)
+    target_compile_definitions(example PRIVATE -DHAS_ABSL)
 endif()
 
 add_library(leakcheck SHARED check.cpp)
