@@ -5,18 +5,25 @@ if (NOT CMAKE_BUILD_TYPE)
 endif()
 set(CMAKE_CXX_STANDARD 20)
 
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -rdynamic")
-project(mallochook LANGUAGES CXX)
+project(mallocvis LANGUAGES CXX)
 
-add_compile_options(-Wall -Wextra -Werror=return-type)
+add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-Wall$<SEMICOLON>-Wextra$<SEMICOLON>-Werror=return-type>)
 
-add_library(mallochook SHARED hook.cpp plot.cpp)
-add_library(leakcheck SHARED check.cpp)
+add_library(mallocvis SHARED hook.cpp plot.cpp)
+
 add_executable(main main.cpp)
-target_link_libraries(main PRIVATE mallochook)
+target_link_libraries(main PRIVATE mallocvis)
 
-find_package(tsl-robin-map REQUIRED)
-target_link_libraries(main PRIVATE tsl::robin_map)
+find_package(tsl-robin-map)
+if (tsl-robin-map_FOUND)
+    target_link_libraries(main PRIVATE tsl::robin_map)
+    target_compile_definitions(main PRIVATE -DHAS_TSL)
+endif()
 
-find_package(absl REQUIRED)
-target_link_libraries(main PRIVATE absl::flat_hash_set absl::node_hash_set)
+find_package(absl)
+if (absl_FOUND)
+    target_link_libraries(main PRIVATE absl::flat_hash_set absl::node_hash_set)
+    target_compile_definitions(main PRIVATE -DHAS_ABSL)
+endif()
+
+add_library(leakcheck SHARED check.cpp)
