@@ -15,6 +15,8 @@
 using namespace std::chrono_literals;
 
 int main() {
+    volatile int *p = new int[64];
+    *p = 1;
     { // vector
         std::vector<int> a;
         for (int i = 0; i < 200; i++) {

@@ -1,3 +1,5 @@
+#include "plot_actions.hpp"
+#include "addr2sym.hpp"
 #include "alloc_action.hpp"
 #include <algorithm>
 #include <cmath>
@@ -10,7 +12,6 @@
 #include <set>
 #include <sstream>
 #include <string>
-#include <vector>
 
 struct LifeBlock {
     AllocOp start_op;
@@ -20,8 +21,8 @@ struct LifeBlock {
     size_t size;
     void *start_caller;
     void *end_caller;
-    uint64_t start_time;
-    uint64_t end_time;
+    int64_t start_time;
+    int64_t end_time;
 };
 
 struct LifeBlockCompare {
@@ -60,12 +61,14 @@ struct SvgWriter {
     size_t gradientId = 0;
     double fullWidth;
     double fullHeight;
+    double margin;
     bool isHtml;
 
-    explicit SvgWriter(std::string path, double width, double height)
+    explicit SvgWriter(std::string path, double width, double height, double margin = 0)
         : out(path),
-          fullWidth(width),
+          fullWidth(width + margin * 2),
           fullHeight(height),
+          margin(margin),
           isHtml(path.rfind(".htm") != std::string::npos) {
         if (isHtml) {
             out << "<!DOCTYPE html>\n<html>\n<head>\n";
@@ -74,14 +77,13 @@ struct SvgWriter {
             out << "#container { position: absolute; top: 0%; left: 0%; width: "
                    "100%; height: 100%; max-width: 100%; max-height: 100%; "
                    "overflow: hidden; }\n";
-            out << "#slide { position: absolute; top: 0%; left: 0%; border: "
-                   "1px solid #666699; transform-origin: left top; }\n";
+            out << "#slide { position: absolute; top: 0%; left: 0%; transform-origin: left top; }\n";
             out << "</style>\n";
             out << "</head>\n<body>\n<div id=\"container\">\n";
-            out << "<svg id=\"slide\" width=\"" << width << "\" height=\""
+            out << "<svg id=\"slide\" width=\"" << width + margin * 2 << "\" height=\""
                 << height << "\" xmlns=\"http://www.w3.org/2000/svg\">\n";
         } else {
-            out << "<svg width=\"" << width << "\" height=\"" << height
+            out << "<svg width=\"" << width + margin * 2 << "\" height=\"" << height
                 << "\" xmlns=\"http://www.w3.org/2000/svg\">\n";
         }
     }
@@ -104,9 +106,30 @@ struct SvgWriter {
 
     void rect(double x, double y, double width, double height,
               std::string const &color) {
+        x += margin;
         out << "<rect width=\"" << width << "\" height=\"" << height
             << "\" x=\"" << x << "\" y=\"" << y << "\" fill=\"" << color
             << "\"/>\n";
+    }
+
+    void text(double x, double y, std::string const &color,
+              std::string const &alignment, std::string const &text) {
+        x += margin;
+        // HTML escape text:
+        std::string html;
+        html.reserve(text.size());
+        for (auto c: text) {
+            switch (c) {
+            case '&':  html += "&amp;"; break;
+            case '<':  html += "&lt;"; break;
+            case '>':  html += "&gt;"; break;
+            case '"':  html += "&quot;"; break;
+            case '\'': html += "&apos;"; break;
+            default:   html += c; break;
+            }
+        }
+        out << "<text x=\"" << x << "\" y=\"" << y << "\" fill=\"" << color
+            << "\"" << alignment << ">" << html << "</text>\n";
     }
 
     SvgWriter(SvgWriter &&) = delete;
@@ -223,10 +246,20 @@ $(function() {
     }
 };
 
-void plot_alloc_actions(std::deque<AllocAction> const &actions) {
+void plot_alloc_actions(std::deque<AllocAction> const &actions,
+                        PlotOptions const &options) {
     std::map<void *, LifeBlock> living;
     std::set<LifeBlock, LifeBlockCompare> dead;
     for (auto const &action: actions) {
+        if (!options.filter_c && kAllocOpIsC[(size_t)action.op]) {
+            continue;
+        }
+        if (!options.filter_cpp && kAllocOpIsCpp[(size_t)action.op]) {
+            continue;
+        }
+        if (!options.filter_cuda && kAllocOpIsCpp[(size_t)action.op]) {
+            continue;
+        }
         if (kAllocOpIsAllocation[(size_t)action.op]) {
             living.insert(
                 {action.ptr,
@@ -245,18 +278,28 @@ void plot_alloc_actions(std::deque<AllocAction> const &actions) {
         }
     }
 
-    auto eval_height = [](LifeBlock const &block) -> double {
-        /* return std::max(std::log2(block.size), 0.0); */
-        return std::sqrt(block.size);
-        /* return block.size; */
-    };
+    double (*eval_height)(LifeBlock const &);
+    if (options.heightScale == PlotOptions::Log) {
+        eval_height = [](LifeBlock const &block) -> double {
+            return std::max(std::log2(block.size), 0.0);
+        };
+    } else if (options.heightScale == PlotOptions::Sqrt) {
+        eval_height = [](LifeBlock const &block) -> double {
+            return std::sqrt(block.size);
+        };
+    } else {
+        eval_height = [](LifeBlock const &block) -> double {
+            return block.size;
+        };
+    }
 
-    uint64_t start_time = std::numeric_limits<uint64_t>::max();
-    uint64_t end_time = std::numeric_limits<uint64_t>::min();
+    int64_t start_time = std::numeric_limits<int64_t>::max();
+    int64_t end_time = std::numeric_limits<int64_t>::min();
     for (auto const &block: dead) {
         start_time = std::min(start_time, block.start_time);
-        if (block.end_time > block.start_time)
+        if (block.end_time > block.start_time) {
             end_time = std::max(end_time, block.end_time);
+        }
     }
 
     for (auto &[_, block]: living) {
@@ -276,60 +319,100 @@ void plot_alloc_actions(std::deque<AllocAction> const &actions) {
     }
     double total_width = end_time - start_time + 1;
 
-    double width_scale = 1920 * 2 / total_width;
-    double height_scale = 1080 * 2 / total_height;
+    double width_scale = options.width / total_width;
+    double height_scale = options.height / total_height;
     total_width *= width_scale;
     total_height *= height_scale;
 
     std::map<void *, size_t> caller_index;
     size_t num_callers = 0;
     for (auto const &caller: callers) {
-        if (caller)
+        if (caller) {
             caller_index.insert({caller, num_callers++});
+        }
     }
     caller_index.insert({nullptr, kNone});
 
-    SvgWriter svg("malloc.html", total_width, total_height);
+    SvgWriter svg(options.path, total_width, total_height, options.margin);
 
     auto caller_color = [&](void *caller) -> std::string {
         size_t index = caller_index.at(caller);
-        if (index == kNone)
+        if (index == kNone) {
             return "black";
+        }
         double hue = index * 1.0 / num_callers;
         return hsvToRgb(hue, 0.7, 0.7);
     };
 
-    auto eval_color = [&](LifeBlock const &block) -> std::string {
-        return svg.defGradient(caller_color(block.start_caller),
-                               caller_color(block.end_caller));
+    auto eval_color =
+        [&](LifeBlock const &block) -> std::pair<std::string, std::string> {
+        return {caller_color(block.start_caller),
+                caller_color(block.end_caller)};
     };
 
-    double y = 0;
-    for (auto const &block: dead) {
-        double width = (block.end_time - block.start_time) * width_scale;
-        double height = eval_height(block) * height_scale;
-        double x = (block.start_time - start_time) * width_scale;
-        std::string color = eval_color(block);
-        svg.rect(x, y, width, height, color);
-        y += height;
-    }
+    auto eval_text =
+        [](LifeBlock const &block) -> std::pair<std::string, std::string> {
+        return {addr2sym(block.start_caller), addr2sym(block.end_caller)};
+    };
 
-    /* size_t screen_width = 60; */
-    /* auto repeat = [&](uint64_t d, char const *s, char const *end) { */
-    /*     size_t n = std::max((size_t)d * screen_width, (size_t)0) / */
-    /*                (end_time - start_time + 1); */
-    /*     std::string r; */
-    /*     for (size_t i = 0; i < n; i++) { */
-    /*         r += s; */
-    /*     } */
-    /*     r += end; */
-    /*     return r; */
-    /* }; */
-    /* for (auto const &block: dead) { */
-    /*     std::cout << repeat(block.start_time - start_time, " ", "┌"); */
-    /*     std::cout << repeat(block.end_time - block.start_time, "─", "┐"); */
-    /*     std::cout << block.size << '\n'; */
-    /* } */
+    if (options.format == PlotOptions::Svg) {
+        double y = 0;
+        for (auto const &block: dead) {
+            double width = (block.end_time - block.start_time) * width_scale;
+            double height = eval_height(block) * height_scale;
+            double x = (block.start_time - start_time) * width_scale;
+            auto [color1, color2] = eval_color(block);
+            auto gradColor = svg.defGradient(color1, color2);
+            svg.rect(x, y, width, height, gradColor);
+            if (options.show_text) {
+                auto [text1, text2] = eval_text(block);
+                auto fontHeight = std::min((size_t)(height * options.text_height_fraction + 0.5),
+                                     options.text_max_height);
+                if (!text1.empty()) {
+                    auto max_width = options.margin + x;
+                    auto fontHeight1 = fontHeight;
+                    if (fontHeight * 0.5 * text1.size() > max_width) {
+                        fontHeight1 *= max_width / (fontHeight * 0.5 * text1.size());
+                    }
+                    svg.text(x, y + height * 0.5, color1,
+                             " style=\"dominant-baseline:central;text-anchor:"
+                             "end;font-size:" +
+                                 std::to_string(fontHeight1) + "px;\"",
+                             text1);
+                }
+                if (!text2.empty()) {
+                    auto max_width = options.width + options.margin - x;
+                    auto fontHeight1 = fontHeight;
+                    if (fontHeight * 0.5 * text2.size() > max_width) {
+                        fontHeight1 *= max_width / (fontHeight * 0.5 * text2.size());
+                    }
+                    svg.text(x + width, y + height * 0.5, color2,
+                             " style=\"dominant-baseline:central;text-anchor:"
+                             "start;font-size:" +
+                                 std::to_string(fontHeight1) + "px;\"",
+                             text2);
+                }
+            }
+            y += height;
+        }
+    } else if (options.format == PlotOptions::Console) {
+        const int64_t screen_width = 60;
+        auto repeat = [&](int64_t d, char const *s, char const *end) {
+            size_t n = std::max(d * screen_width, (int64_t)0) /
+                       (end_time - start_time + 1);
+            std::string r;
+            for (size_t i = 0; i < n; i++) {
+                r += s;
+            }
+            r += end;
+            return r;
+        };
+        for (auto const &block: dead) {
+            std::cout << repeat(block.start_time - start_time, " ", "┌");
+            std::cout << repeat(block.end_time - block.start_time, "─", "┐");
+            std::cout << block.size << '\n';
+        }
+    }
 }
 
 /* void dump_alloc_actions_to_file(std::deque<AllocAction> const &actions,

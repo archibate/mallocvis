@@ -10,6 +10,11 @@ enum class AllocOp {
     DeleteArray,
     Malloc,
     Free,
+    CudaHostMalloc,
+    CudaDeviceMalloc,
+    CudaManagedMalloc,
+    CudaFree,
+    Unknown,
 };
 
 struct AllocAction {
@@ -19,7 +24,7 @@ struct AllocAction {
     size_t size;
     size_t align;
     void *caller;
-    uint64_t time;
+    int64_t time;
 };
 
 constexpr const char *kAllocOpNames[] = {
@@ -29,6 +34,11 @@ constexpr const char *kAllocOpNames[] = {
     "DeleteArray",
     "Malloc",
     "Free",
+    "CudaHostMalloc",
+    "CudaDeviceMalloc",
+    "CudaManagedMalloc",
+    "CudaFree",
+    "Unknown",
 };
 
 constexpr bool kAllocOpIsAllocation[] = {
@@ -38,15 +48,67 @@ constexpr bool kAllocOpIsAllocation[] = {
     false,
     true,
     false,
+    true,
+    true,
+    true,
+    false,
+    false,
 };
 
-constexpr AllocOp kAllocOpPair[] = {
+constexpr bool kAllocOpIsCpp[] = {
+    true,
+    true,
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+};
+
+constexpr bool kAllocOpIsC[] = {
+    false,
+    false,
+    false,
+    false,
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false,
+};
+
+constexpr bool kAllocOpIsCuda[] = {
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    true,
+    true,
+    true,
+    true,
+    false,
+};
+
+constexpr AllocOp kAllocOpFreeFunction[] = {
     AllocOp::Delete,
-    AllocOp::New,
+    AllocOp::Unknown,
     AllocOp::DeleteArray,
-    AllocOp::NewArray,
-    AllocOp::Free,
+    AllocOp::Unknown,
     AllocOp::Malloc,
+    AllocOp::Unknown,
+    AllocOp::CudaFree,
+    AllocOp::CudaFree,
+    AllocOp::CudaFree,
+    AllocOp::Unknown,
+    AllocOp::Unknown,
 };
 
 constexpr size_t kNone = (size_t)-1;

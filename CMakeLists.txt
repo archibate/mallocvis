@@ -7,9 +7,10 @@ set(CMAKE_CXX_STANDARD 20)
 
 project(mallocvis LANGUAGES CXX)
 
-add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-Wall$<SEMICOLON>-Wextra$<SEMICOLON>-Werror=return-type>)
+add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-Wall$<SEMICOLON>-Wextra$<SEMICOLON>-Werror=return-type$<SEMICOLON>-rdynamic>)
+add_link_options($<$<CXX_COMPILER_ID:GNU,Clang>:-rdynamic>)
 
-add_library(mallocvis SHARED hook.cpp plot.cpp)
+add_library(mallocvis SHARED malloc_hook.cpp plot_actions.cpp)
 
 add_executable(example example.cpp)
 target_link_libraries(example PRIVATE mallocvis)
@@ -25,5 +26,3 @@ if (absl_FOUND)
     target_link_libraries(example PRIVATE absl::flat_hash_set absl::node_hash_set)
     target_compile_definitions(example PRIVATE -DHAS_ABSL)
 endif()
-
-add_library(leakcheck SHARED check.cpp)
