@@ -30,7 +30,15 @@ LD_PRELOAD=libmallocvis.so ./program
 export MALLOCVIS="format:svg;path:malloc.html;height_scale:log;z_indicates:thread;show_text:1;text_max_height:24;text_height_fraction:0.4;filter_cpp:1;filter_c:1;filter_cuda:1;svg_margin:420;svg_width:2000;svg_height:1460"
 ```
 
-[cover2.png](cover2.png)
+开启调用者显示 (show_text 选项) 后：
+
+![cover2.png](cover2.png)
+
+导出为 OBJ 格式的三维模型 ("path:malloc.obj") 并在 Blender 中打开查看：
+
+![cover3.png](cover3.png)
+
+> 以上是 VLC 的 malloc 图。
 
 # Mallocvis
 
@@ -38,7 +46,7 @@ Mallocvis is a tool developed by Xiaopeng to visualize dynamic memory allocation
 
 The working principle of mallocvis is to hook memory allocation functions in C/C++, such as malloc, free, realloc, operator new, operator delete, etc., to track memory allocation and deallocation operations in the program. It visualizes the tracked memory allocation information, including the size, address, and duration of the memory blocks.
 
-!![cover.png](cover.png)
+![cover.png](cover.png)
 
 The color represents the caller's address, the height represents the size of the allocated memory block, and the length represents the duration of the memory block's existence in memory.
 
@@ -64,4 +72,12 @@ Options can be specified through the environment variable MALLOCVIS:
 export MALLOCVIS="format:svg;path:malloc.html;height_scale:log;z_indicates:thread;show_text:1;text_max_height:24;text_height_fraction:0.4;filter_cpp:1;filter_c:1;filter_cuda:1;svg_margin:420;svg_width:2000;svg_height:1460"
 ```
 
+With the caller display (show_text) option enabled:
+
 ![cover2.png](cover2.png)
+
+Exported as a 3D model in OBJ format ("path:malloc.obj") and view in Blender:
+
+![cover3.png](cover3.png)
+
+> Above is the malloc graph for VLC.
