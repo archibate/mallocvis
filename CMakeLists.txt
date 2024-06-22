@@ -29,6 +29,13 @@ if (absl_FOUND)
     target_compile_definitions(example PRIVATE -DHAS_ABSL)
 endif()
 
+find_package(OpenVDB)
+if (OpenVDB_FOUND)
+    add_executable(vdb_example vdb_example.cpp)
+    target_link_libraries(vdb_example PRIVATE mallocvis)
+    target_link_libraries(vdb_example PRIVATE OpenVDB::openvdb)
+endif()
+
 find_package(OpenGL)
 find_package(glfw3)
 find_package(glm)
