@@ -38,7 +38,7 @@ Mallocvis is a tool developed by Xiaopeng to visualize dynamic memory allocation
 
 The working principle of mallocvis is to hook memory allocation functions in C/C++, such as malloc, free, realloc, operator new, operator delete, etc., to track memory allocation and deallocation operations in the program. It visualizes the tracked memory allocation information, including the size, address, and duration of the memory blocks.
 
-![cover.png](cover.png)
+!![cover.png](cover.png)
 
 The color represents the caller's address, the height represents the size of the allocated memory block, and the length represents the duration of the memory block's existence in memory.
 
@@ -64,4 +64,4 @@ Options can be specified through the environment variable MALLOCVIS:
 export MALLOCVIS="format:svg;path:malloc.html;height_scale:log;z_indicates:thread;show_text:1;text_max_height:24;text_height_fraction:0.4;filter_cpp:1;filter_c:1;filter_cuda:1;svg_margin:420;svg_width:2000;svg_height:1460"
 ```
 
-[cover2.png](cover2.png)
+![cover2.png](cover2.png)
