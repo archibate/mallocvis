@@ -31,10 +31,10 @@ struct PlotOptions {
     PlotFormat format = Svg;
     std::string path = "";
 
-    PlotScale height_scale = Log;
+    PlotScale height_scale = Sqrt;
     PlotIndicate z_indicates = Thread;
     // PlotIndicate color_indicates = Caller;
-    PlotLayout layout = Address;
+    PlotLayout layout = Timeline;
 
     bool show_text = true;
     size_t text_max_height = 24;

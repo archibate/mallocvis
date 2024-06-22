@@ -14,6 +14,8 @@ add_library(mallocvis SHARED malloc_hook.cpp plot_actions.cpp)
 
 add_executable(example example.cpp)
 target_link_libraries(example PRIVATE mallocvis)
+add_executable(mt_example mt_example.cpp)
+target_link_libraries(mt_example PRIVATE mallocvis)
 
 find_package(tsl-robin-map)
 if (tsl-robin-map_FOUND)

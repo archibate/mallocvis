@@ -201,7 +201,20 @@ extern "C" void *__libc_memalign(size_t align, size_t size) noexcept;
 # define REAL_LIBC(name)      __libc_##name
 # define MAY_OVERRIDE_MALLOC  1
 # define MAY_SUPPORT_MEMALIGN 1
-# define RETURN_ADDRESS       __builtin_return_address(0)
+# undef RETURN_ADDRESS
+# ifdef __has_builtin
+#  if __has_builtin(__builtin_return_address)
+#   if __has_builtin(__builtin_extract_return_addr)
+#    define RETURN_ADDRESS \
+        __builtin_extract_return_addr(__builtin_return_address(0))
+#   else
+#    define RETURN_ADDRESS __builtin_return_address(0)
+#   endif
+#  endif
+# endif
+# ifndef RETURN_ADDRESS
+#  define RETURN_ADDRESS ((void *)0)
+# endif
 #elif _MSC_VER
 static void *msvc_malloc(size_t size) noexcept {
     return HeapAlloc(GetProcessHeap(), 0, size);
