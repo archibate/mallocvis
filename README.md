@@ -24,6 +24,14 @@ LD_PRELOAD=libmallocvis.so ./program
 
 使用鼠标拖拽可以移动，滚轮缩放，双击恢复原始大小。
 
+通过环境变量 MALLOCVIS 可以指定各种选项：
+
+```bash
+export MALLOCVIS="format:svg;path:malloc.html;height_scale:log;z_indicates:thread;show_text:1;text_max_height:24;text_height_fraction:0.4;filter_cpp:1;filter_c:1;filter_cuda:1;svg_margin:420;svg_width:2000;svg_height:1460"
+```
+
+[cover2.png](cover2.png)
+
 # Mallocvis
 
 Mallocvis is a tool developed by Xiaopeng to visualize dynamic memory allocation in C/C++ programs. It helps developers get a better understanding of memory allocation in their programs, making it easier to detect memory leaks, memory fragmentation, or improper memory usage.
@@ -49,3 +57,11 @@ LD_PRELOAD=libmallocvis.so ./program
 After running, a `malloc.html` file will be generated in the current directory (or the build directory), which can be opened in a browser to view the visualization results.
 
 You can use the mouse to drag and drop to move, scroll to zoom, and double-click to restore the original size.
+
+Options can be specified through the environment variable MALLOCVIS:
+
+```bash
+export MALLOCVIS="format:svg;path:malloc.html;height_scale:log;z_indicates:thread;show_text:1;text_max_height:24;text_height_fraction:0.4;filter_cpp:1;filter_c:1;filter_cuda:1;svg_margin:420;svg_width:2000;svg_height:1460"
+```
+
+[cover2.png](cover2.png)
