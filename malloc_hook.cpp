@@ -52,7 +52,7 @@ struct GlobalData {
             actions.insert(actions.end(), their_actions.begin(),
                            their_actions.end());
         }
-        plot_alloc_actions(actions, {});
+        plot_alloc_actions(actions);
     }
 } global;
 
