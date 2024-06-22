@@ -171,10 +171,10 @@ struct EnableGuard {
 
     void on(AllocOp op, void *ptr, size_t size, size_t align,
             void *caller) const {
-        if ((uintptr_t)ptr >= 0x7000'0000'0000) {
-            // printf("%p %d %zd %s\n", ptr, (int)op, size, addr2sym(caller).c_str());
-            return;
-        }
+        // if ((uintptr_t)ptr >= 0x7000'0000'0000) {
+        //     // printf("%p %d %zd %s\n", ptr, (int)op, size, addr2sym(caller).c_str());
+        //     return;
+        // }
         if (ptr) {
             auto now = std::chrono::high_resolution_clock::now();
             int64_t time = std::chrono::duration_cast<std::chrono::nanoseconds>(
