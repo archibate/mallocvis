@@ -48,6 +48,10 @@ export MALLOCVIS="format:svg;path:malloc.html;height_scale:log;z_indicates:threa
 
 > 以上是 VLC 的 malloc 图。
 
+![cover5.png](cover5.png)
+
+> 以上是 [vdb_example.cpp](vdb_example.cpp) 的 malloc 图。
+
 # Mallocvis
 
 Mallocvis is a tool developed by Xiaopeng to visualize dynamic memory allocation in C/C++ programs. It helps developers get a better understanding of memory allocation in their programs, making it easier to detect memory leaks, memory fragmentation, or improper memory usage.
@@ -97,3 +101,7 @@ Exported as a 3D model in OBJ format ("path:malloc.obj") and view in Blender:
 ![cover4.png](cover4.png)
 
 > Above is the malloc graph for VLC.
+
+![cover5.png](cover5.png)
+
+> Above is the malloc graph for [vdb_example.cpp](vdb_example.cpp).
