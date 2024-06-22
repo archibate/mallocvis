@@ -2,7 +2,7 @@
 
 #include "alloc_action.hpp"
 #include <cstddef>
-#include <deque>
+#include <vector>
 #include <string>
 
 struct PlotOptions {
@@ -23,11 +23,19 @@ struct PlotOptions {
         Caller,
     };
 
+    enum PlotLayout {
+        Timeline,
+        Address,
+    };
+
     PlotFormat format = Svg;
     std::string path = "";
 
     PlotScale height_scale = Log;
     PlotIndicate z_indicates = Thread;
+    // PlotIndicate color_indicates = Caller;
+    PlotLayout layout = Address;
+
     bool show_text = true;
     size_t text_max_height = 24;
     double text_height_fraction = 0.4;
@@ -42,4 +50,4 @@ struct PlotOptions {
 };
 
 PlotOptions parse_plot_options_from_env();
-void plot_alloc_actions(std::deque<AllocAction> const &actions, PlotOptions const &options = parse_plot_options_from_env());
+void plot_alloc_actions(std::vector<AllocAction> actions, PlotOptions const &options = parse_plot_options_from_env());

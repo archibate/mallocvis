@@ -25,6 +25,7 @@ struct LifeBlock {
     AllocOp end_op;
     uint32_t start_tid;
     uint32_t end_tid;
+    void *ptr;
     size_t size;
     void *start_caller;
     void *end_caller;
@@ -354,7 +355,7 @@ PlotOptions parse_plot_options_from_env() {
     if (!env) {
         return options;
     }
-    // MALLOCVIS=format:obj;path:/tmp/malloc.obj;height_scale:log;z_indicates:thread;show_text:0;text_max_height:24;text_height_fraction:0.4;filter_cpp:1;filter_c:1;filter_cuda:1;svg_margin:420;svg_width:2000;svg_height:1460
+    // MALLOCVIS=format:obj;path:/tmp/malloc.obj;height_scale:log;z_indicates:thread;layout:timeline;show_text:0;text_max_height:24;text_height_fraction:0.4;filter_cpp:1;filter_c:1;filter_cuda:1;svg_margin:420;svg_width:2000;svg_height:1460
     std::string s(env);
     auto splits = string_split(s, ';');
     bool has_format = false;
@@ -397,6 +398,12 @@ PlotOptions parse_plot_options_from_env() {
             } else if (v == "caller") {
                 options.z_indicates = PlotOptions::Caller;
             }
+        } else if (k == "layout") {
+            if (v == "timeline") {
+                options.layout = PlotOptions::Timeline;
+            } else if (v == "address") {
+                options.layout = PlotOptions::Address;
+            }
         } else if (k == "show_text") {
             options.show_text = v == "1";
         } else if (k == "text_max_height") {
@@ -420,8 +427,13 @@ PlotOptions parse_plot_options_from_env() {
     return options;
 }
 
-void plot_alloc_actions(std::deque<AllocAction> const &actions,
+void plot_alloc_actions(std::vector<AllocAction> actions,
                         PlotOptions const &options) {
+    if (actions.empty()) return;
+    std::sort(actions.begin(), actions.end(), [](AllocAction const &a, AllocAction const &b) {
+        return a.time < b.time;
+    });
+
     std::cerr << "Ploting " << actions.size() << " actions...\n";
     std::map<void *, LifeBlock> living;
     std::set<LifeBlock, LifeBlockCompare> dead;
@@ -438,7 +450,7 @@ void plot_alloc_actions(std::deque<AllocAction> const &actions,
         if (kAllocOpIsAllocation[(size_t)action.op]) {
             living.insert(
                 {action.ptr,
-                 {action.op, action.op, action.tid, action.tid, action.size,
+                 {action.op, action.op, action.tid, action.tid, action.ptr, action.size,
                   action.caller, action.caller, action.time, action.time}});
         } else {
             auto it = living.find(action.ptr);
@@ -473,6 +485,8 @@ void plot_alloc_actions(std::deque<AllocAction> const &actions,
     int64_t end_time = std::numeric_limits<int64_t>::min();
     uintptr_t start_caller = std::numeric_limits<uintptr_t>::max();
     uintptr_t end_caller = std::numeric_limits<uintptr_t>::min();
+    uintptr_t start_ptr = std::numeric_limits<uintptr_t>::max();
+    uintptr_t end_ptr = std::numeric_limits<uintptr_t>::min();
     std::unordered_map<uint32_t, uint32_t> tids;
     for (auto const &block: dead) {
         start_time = std::min(start_time, block.start_time);
@@ -483,6 +497,8 @@ void plot_alloc_actions(std::deque<AllocAction> const &actions,
         end_caller = std::max(end_caller, (uintptr_t)block.start_caller);
         start_caller = std::min(start_caller, (uintptr_t)block.end_caller);
         end_caller = std::max(end_caller, (uintptr_t)block.end_caller);
+        start_ptr = std::min(start_ptr, (uintptr_t)block.ptr);
+        end_ptr = std::max(end_ptr, (uintptr_t)block.ptr + block.size);
         tids.insert({block.start_tid, tids.size()});
         tids.insert({block.end_tid, tids.size()});
     }
@@ -496,6 +512,8 @@ void plot_alloc_actions(std::deque<AllocAction> const &actions,
         end_caller = std::max(end_caller, (uintptr_t)block.start_caller);
         start_caller = std::min(start_caller, (uintptr_t)block.end_caller);
         end_caller = std::max(end_caller, (uintptr_t)block.end_caller);
+        start_ptr = std::min(start_ptr, (uintptr_t)block.ptr);
+        end_ptr = std::max(end_ptr, (uintptr_t)block.ptr + block.size);
         tids.insert({block.start_tid, tids.size()});
         tids.insert({block.end_tid, tids.size()});
         dead.insert(block);
@@ -561,6 +579,9 @@ void plot_alloc_actions(std::deque<AllocAction> const &actions,
             callers.insert(block.start_caller);
             callers.insert(block.end_caller);
         }
+        if (options.layout == PlotOptions::Address) {
+            total_height = end_ptr - start_ptr;
+        }
         double total_width = end_time - start_time + 1;
 
         double width_scale = options.svg_width / total_width;
@@ -601,43 +622,84 @@ void plot_alloc_actions(std::deque<AllocAction> const &actions,
         SvgWriter svg(options.path.empty() ? "malloc.html" : options.path, total_width, total_height, options.svg_margin);
         double y = 0;
         std::cerr << "Generating SVG graph...\n";
-        for (auto const &block: dead) {
-            double width = (block.end_time - block.start_time) * width_scale;
-            double height = eval_height(block) * height_scale;
-            double x = (block.start_time - start_time) * width_scale;
-            auto [color1, color2] = eval_color(block);
-            auto gradColor = svg.defGradient(color1, color2);
-            svg.rect(x, y, width, height, gradColor);
-            if (options.show_text) {
-                auto [text1, text2] = eval_text(block);
-                auto fontHeight = std::min((size_t)(height * options.text_height_fraction + 0.5),
-                                           options.text_max_height);
-                if (!text1.empty()) {
-                    auto max_width = options.svg_margin + x;
-                    auto fontHeight1 = fontHeight;
-                    if (fontHeight * 0.5 * text1.size() > max_width) {
-                        fontHeight1 *= max_width / (fontHeight * 0.5 * text1.size());
+        if (options.layout == PlotOptions::Address) {
+            for (auto const &block: dead) {
+                double width = (block.end_time - block.start_time) * width_scale;
+                double height = block.size * height_scale;
+                double y = ((uintptr_t)block.ptr - start_ptr) * height_scale;
+                double x = (block.start_time - start_time) * width_scale;
+                auto [color1, color2] = eval_color(block);
+                auto gradColor = svg.defGradient(color1, color2);
+                svg.rect(x, y, width, height, gradColor);
+                if (options.show_text) {
+                    auto [text1, text2] = eval_text(block);
+                    auto fontHeight = std::min((size_t)(height * options.text_height_fraction + 0.5),
+                                               options.text_max_height);
+                    if (!text1.empty()) {
+                        auto max_width = options.svg_margin + x;
+                        auto fontHeight1 = fontHeight;
+                        if (fontHeight * 0.5 * text1.size() > max_width) {
+                            fontHeight1 *= max_width / (fontHeight * 0.5 * text1.size());
+                        }
+                        svg.text(x, y + height * 0.5, color1,
+                                 " style=\"dominant-baseline:central;text-anchor:"
+                                 "end;font-size:" +
+                                 std::to_string(fontHeight1) + "px;\"",
+                                 text1);
                     }
-                    svg.text(x, y + height * 0.5, color1,
-                             " style=\"dominant-baseline:central;text-anchor:"
-                             "end;font-size:" +
-                             std::to_string(fontHeight1) + "px;\"",
-                             text1);
-                }
-                if (!text2.empty()) {
-                    auto max_width = options.svg_width + options.svg_margin - x;
-                    auto fontHeight1 = fontHeight;
-                    if (fontHeight * 0.5 * text2.size() > max_width) {
-                        fontHeight1 *= max_width / (fontHeight * 0.5 * text2.size());
+                    if (!text2.empty()) {
+                        auto max_width = options.svg_width + options.svg_margin - x;
+                        auto fontHeight1 = fontHeight;
+                        if (fontHeight * 0.5 * text2.size() > max_width) {
+                            fontHeight1 *= max_width / (fontHeight * 0.5 * text2.size());
+                        }
+                        svg.text(x + width, y + height * 0.5, color2,
+                                 " style=\"dominant-baseline:central;text-anchor:"
+                                 "start;font-size:" +
+                                 std::to_string(fontHeight1) + "px;\"",
+                                 text2);
                     }
-                    svg.text(x + width, y + height * 0.5, color2,
-                             " style=\"dominant-baseline:central;text-anchor:"
-                             "start;font-size:" +
-                             std::to_string(fontHeight1) + "px;\"",
-                             text2);
                 }
             }
-            y += height;
+        } else {
+            for (auto const &block: dead) {
+                double width = (block.end_time - block.start_time) * width_scale;
+                double height = eval_height(block) * height_scale;
+                double x = (block.start_time - start_time) * width_scale;
+                auto [color1, color2] = eval_color(block);
+                auto gradColor = svg.defGradient(color1, color2);
+                svg.rect(x, y, width, height, gradColor);
+                if (options.show_text) {
+                    auto [text1, text2] = eval_text(block);
+                    auto fontHeight = std::min((size_t)(height * options.text_height_fraction + 0.5),
+                                               options.text_max_height);
+                    if (!text1.empty()) {
+                        auto max_width = options.svg_margin + x;
+                        auto fontHeight1 = fontHeight;
+                        if (fontHeight * 0.5 * text1.size() > max_width) {
+                            fontHeight1 *= max_width / (fontHeight * 0.5 * text1.size());
+                        }
+                        svg.text(x, y + height * 0.5, color1,
+                                 " style=\"dominant-baseline:central;text-anchor:"
+                                 "end;font-size:" +
+                                 std::to_string(fontHeight1) + "px;\"",
+                                 text1);
+                    }
+                    if (!text2.empty()) {
+                        auto max_width = options.svg_width + options.svg_margin - x;
+                        auto fontHeight1 = fontHeight;
+                        if (fontHeight * 0.5 * text2.size() > max_width) {
+                            fontHeight1 *= max_width / (fontHeight * 0.5 * text2.size());
+                        }
+                        svg.text(x + width, y + height * 0.5, color2,
+                                 " style=\"dominant-baseline:central;text-anchor:"
+                                 "start;font-size:" +
+                                 std::to_string(fontHeight1) + "px;\"",
+                                 text2);
+                    }
+                }
+                y += height;
+            }
         }
 
         std::cerr << "Writing SVG file...\n";
