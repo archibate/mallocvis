@@ -215,9 +215,12 @@ extern "C" void *__libc_memalign(size_t align, size_t size) noexcept;
 #    define RETURN_ADDRESS __builtin_return_address(0)
 #   endif
 #  endif
+# elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 8)
+#  define RETURN_ADDRESS __builtin_return_address(0)
 # endif
 # ifndef RETURN_ADDRESS
 #  define RETURN_ADDRESS ((void *)0)
+#  pragma message("Cannot find __builtin_return_address")
 # endif
 #elif _MSC_VER
 static void *msvc_malloc(size_t size) noexcept {

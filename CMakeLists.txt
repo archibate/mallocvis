@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.18)
 
+# set(CMAKE_CXX_COMPILER clang++)
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
@@ -7,8 +8,8 @@ set(CMAKE_CXX_STANDARD 17)
 
 project(mallocvis LANGUAGES CXX)
 
-add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-Wall$<SEMICOLON>-Wextra$<SEMICOLON>-Werror=return-type$<SEMICOLON>-rdynamic>)
-add_link_options($<$<CXX_COMPILER_ID:GNU,Clang>:-rdynamic>)
+add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-Wall$<SEMICOLON>-Wextra$<SEMICOLON>-Werror=return-type$<SEMICOLON>> $<$<CXX_COMPILER_ID:GNU>:-rdynamic>)# $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-stdlib=libc++>)
+add_link_options($<$<CXX_COMPILER_ID:GNU>:-rdynamic>)# $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-stdlib=libc++>)
 
 add_library(mallocvis SHARED malloc_hook.cpp plot_actions.cpp)
 
