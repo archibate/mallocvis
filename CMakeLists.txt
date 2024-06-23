@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.12)
 
 # set(CMAKE_CXX_COMPILER clang++)
 if (NOT CMAKE_BUILD_TYPE)
@@ -12,6 +12,8 @@ add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-Wall$<SEMICOLON>-Wextra$<SEM
 add_link_options($<$<CXX_COMPILER_ID:GNU>:-rdynamic>)# $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-stdlib=libc++>)
 
 add_library(mallocvis SHARED malloc_hook.cpp plot_actions.cpp)
+find_package(Threads REQUIRED)
+target_link_libraries(mallocvis PRIVATE Threads::Threads)
 
 add_executable(example example.cpp)
 target_link_libraries(example PRIVATE mallocvis)
