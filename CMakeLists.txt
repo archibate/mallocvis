@@ -8,8 +8,10 @@ set(CMAKE_CXX_STANDARD 17)
 
 project(mallocvis LANGUAGES CXX)
 
-add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-Wall$<SEMICOLON>-Wextra$<SEMICOLON>-Werror=return-type$<SEMICOLON>> $<$<CXX_COMPILER_ID:GNU>:-rdynamic>)# $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-stdlib=libc++>)
-add_link_options($<$<CXX_COMPILER_ID:GNU>:-rdynamic>)# $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-stdlib=libc++>)
+add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-Wall$<SEMICOLON>-Wextra$<SEMICOLON>-Werror=return-type$<SEMICOLON>>)
+add_link_options($<$<CXX_COMPILER_ID:GNU>:-rdynamic>)
+# add_compile_options($<$<CXX_COMPILER_ID:Clang>:-stdlib=libc++>)
+# add_link_options($<$<CXX_COMPILER_ID:Clang>:-stdlib=libc++>)
 
 add_library(mallocvis SHARED malloc_hook.cpp plot_actions.cpp)
 find_package(Threads)
@@ -20,12 +22,6 @@ endif()
 
 add_executable(example example.cpp)
 target_link_libraries(example PRIVATE mallocvis)
-
-if (Threads_FOUND)
-    add_executable(mt_example mt_example.cpp)
-    target_link_libraries(mt_example PRIVATE mallocvis)
-    target_link_libraries(mt_example PRIVATE Threads::Threads)
-endif()
 
 find_package(tsl-robin-map)
 if (tsl-robin-map_FOUND)
@@ -44,6 +40,12 @@ if (OpenVDB_FOUND)
     add_executable(vdb_example vdb_example.cpp)
     target_link_libraries(vdb_example PRIVATE mallocvis)
     target_link_libraries(vdb_example PRIVATE OpenVDB::openvdb)
+endif()
+
+if (Threads_FOUND)
+    add_executable(mt_example mt_example.cpp)
+    target_link_libraries(mt_example PRIVATE mallocvis)
+    target_link_libraries(mt_example PRIVATE Threads::Threads)
 endif()
 
 find_package(OpenGL)
