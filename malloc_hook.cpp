@@ -63,10 +63,13 @@ struct GlobalData {
     static inline size_t const kPerThreadsCount = 8;
     PerThreadData per_threads[kPerThreadsCount];
     bool export_plot_on_exit = true;
+#if HAS_THREADS
     std::thread export_thread;
+#endif
     std::atomic<bool> stopped{false};
 
     GlobalData() {
+#if HAS_THREADS
         if (0) {
             std::string path = "malloc.fifo";
             export_thread = std::thread([this, path] {
@@ -75,6 +78,7 @@ struct GlobalData {
             });
             export_plot_on_exit = false;
         }
+#endif
         for (size_t i = 0; i < kPerThreadsCount; ++i) {
             per_threads[i].enable = true;
         }
@@ -84,6 +88,7 @@ struct GlobalData {
         return per_threads[((size_t)tid * 17) % kPerThreadsCount];
     }
 
+#if HAS_THREADS
     void export_thread_entry(std::string const &path) {
 #if HAS_PMR
         size_t bufsz = 64 * 1024 * 1024;
@@ -125,6 +130,7 @@ struct GlobalData {
             actions.clear();
         }
     }
+#endif
 
     ~GlobalData() {
         for (size_t i = 0; i < kPerThreadsCount; ++i) {

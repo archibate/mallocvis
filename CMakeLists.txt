@@ -12,13 +12,20 @@ add_compile_options($<$<CXX_COMPILER_ID:GNU,Clang>:-Wall$<SEMICOLON>-Wextra$<SEM
 add_link_options($<$<CXX_COMPILER_ID:GNU>:-rdynamic>)# $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-stdlib=libc++>)
 
 add_library(mallocvis SHARED malloc_hook.cpp plot_actions.cpp)
-find_package(Threads REQUIRED)
-target_link_libraries(mallocvis PRIVATE Threads::Threads)
+find_package(Threads)
+if (Threads_FOUND)
+    target_link_libraries(mallocvis PRIVATE Threads::Threads)
+    target_compile_definitions(mallocvis PRIVATE -DHAS_THREADS)
+endif()
 
 add_executable(example example.cpp)
 target_link_libraries(example PRIVATE mallocvis)
-add_executable(mt_example mt_example.cpp)
-target_link_libraries(mt_example PRIVATE mallocvis)
+
+if (Threads_FOUND)
+    add_executable(mt_example mt_example.cpp)
+    target_link_libraries(mt_example PRIVATE mallocvis)
+    target_link_libraries(mt_example PRIVATE Threads::Threads)
+endif()
 
 find_package(tsl-robin-map)
 if (tsl-robin-map_FOUND)
