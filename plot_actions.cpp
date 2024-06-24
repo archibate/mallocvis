@@ -756,8 +756,13 @@ void mallocvis_plot_alloc_actions(std::vector<AllocAction> actions) {
             return r;
         };
         for (auto const &block: dead) {
+#if _WIN32
+            std::cout << repeat(block.start_time - start_time, " ", "|");
+            std::cout << repeat(block.end_time - block.start_time, "-", "|");
+#else
             std::cout << repeat(block.start_time - start_time, " ", "┌");
             std::cout << repeat(block.end_time - block.start_time, "─", "┐");
+#endif
             std::cout << block.size << '\n';
         }
     }
