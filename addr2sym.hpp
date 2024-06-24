@@ -45,8 +45,8 @@ inline std::string addr2sym(void *addr) {
     return ret;
 }
 #elif _MSC_VER
-# include <dbghelp.h>
 # include <windows.h>
+# include <dbghelp.h>
 # include <stdio.h>
 
 # pragma comment(lib, "dbghelp.lib")
@@ -76,8 +76,8 @@ inline std::string addr2sym(void *addr) {
     return name;
 }
 #elif _WIN32
-# include <dbghelp.h>
 # include <windows.h>
+# include <dbghelp.h>
 
 # pragma comment(lib, "dbghelp.lib")
 

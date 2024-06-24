@@ -7,6 +7,9 @@
 #  include <charconv>
 # endif
 #endif
+#if __cpp_lib_to_chars
+# include <charconv>
+#endif
 #include <cmath>
 #include <cstdlib>
 #include <deque>
@@ -19,6 +22,8 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#undef min
+#undef max
 
 namespace {
 

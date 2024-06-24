@@ -16,7 +16,7 @@
 # define MALLOCVIS_EXPORT
 #elif _WIN32
 # include <windows.h>
-# define MALLOCVIS_EXPORT __declspec(dllexport)
+# define MALLOCVIS_EXPORT // __declspec(dllexport)
 #endif
 #if __cplusplus >= 201703L || __cpp_lib_memory_resource
 # include <memory_resource>
