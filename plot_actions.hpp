@@ -49,5 +49,4 @@ struct PlotOptions {
     size_t svg_height = 1460;
 };
 
-PlotOptions parse_plot_options_from_env();
-void plot_alloc_actions(std::vector<AllocAction> actions, PlotOptions const &options = parse_plot_options_from_env());
+void mallocvis_plot_alloc_actions(std::vector<AllocAction> actions);

@@ -3,13 +3,12 @@
 #include "alloc_action.hpp"
 #include <algorithm>
 #ifdef __has_include
-#if __cplusplus >= 201703L && __has_include(<charconv>)
-#include <charconv>
+# if __cplusplus >= 201703L && __has_include(<charconv>)
+#  include <charconv>
+# endif
 #endif
-#endif
-#include <cstdlib>
-#include <unordered_map>
 #include <cmath>
+#include <cstdlib>
 #include <deque>
 #include <fstream>
 #include <iomanip>
@@ -19,6 +18,9 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <unordered_map>
+
+namespace {
 
 struct LifeBlock {
     AllocOp start_op;
@@ -72,7 +74,8 @@ struct SvgWriter {
     double margin;
     bool isHtml;
 
-    explicit SvgWriter(std::string path, double width, double height, double margin = 0)
+    explicit SvgWriter(std::string path, double width, double height,
+                       double margin = 0)
         : out(path),
           fullWidth(width + margin * 2),
           fullHeight(height),
@@ -85,14 +88,16 @@ struct SvgWriter {
             out << "#container { position: absolute; top: 0%; left: 0%; width: "
                    "100%; height: 100%; max-width: 100%; max-height: 100%; "
                    "overflow: hidden; }\n";
-            out << "#slide { position: absolute; top: 0%; left: 0%; transform-origin: left top; }\n";
+            out << "#slide { position: absolute; top: 0%; left: 0%; "
+                   "transform-origin: left top; }\n";
             out << "</style>\n";
             out << "</head>\n<body>\n<div id=\"container\">\n";
-            out << "<svg id=\"slide\" width=\"" << width + margin * 2 << "\" height=\""
-                << height << "\" xmlns=\"http://www.w3.org/2000/svg\">\n";
-        } else {
-            out << "<svg width=\"" << width + margin * 2 << "\" height=\"" << height
+            out << "<svg id=\"slide\" width=\"" << width + margin * 2
+                << "\" height=\"" << height
                 << "\" xmlns=\"http://www.w3.org/2000/svg\">\n";
+        } else {
+            out << "<svg width=\"" << width + margin * 2 << "\" height=\""
+                << height << "\" xmlns=\"http://www.w3.org/2000/svg\">\n";
         }
     }
 
@@ -260,8 +265,7 @@ struct ObjWriter {
     size_t nverts = 0;
     std::ofstream out;
 
-    ObjWriter(std::string path) : out(path) {
-    }
+    ObjWriter(std::string path) : out(path) {}
 
 #if __cpp_lib_to_chars
     static std::string double_to_string(double d) {
@@ -286,12 +290,15 @@ struct ObjWriter {
 #else
     static std::string double_to_string(double d) {
         std::ostringstream os;
-        os << std::fixed << std::setprecision(std::numeric_limits<double>::digits10) << d;
+        os << std::fixed
+           << std::setprecision(std::numeric_limits<double>::digits10) << d;
         std::string s = os.str();
-        while (!s.empty() && s.back() == '0')
+        while (!s.empty() && s.back() == '0') {
             s.pop_back();
-        if (!s.empty() && s.back() == '.')
+        }
+        if (!s.empty() && s.back() == '.') {
             s.pop_back();
+        }
         return s;
     }
 
@@ -340,12 +347,13 @@ struct ObjWriter {
     }
 };
 
-static std::deque<std::string> string_split(const std::string &s, char delim) {
+std::deque<std::string> string_split(std::string const &s, char delim) {
     std::deque<std::string> elems;
     std::istringstream iss(s);
     std::string item;
-    while (getline(iss, item, delim))
+    while (getline(iss, item, delim)) {
         elems.push_back(item);
+    }
     return elems;
 }
 
@@ -359,10 +367,11 @@ PlotOptions parse_plot_options_from_env() {
     std::string s(env);
     auto splits = string_split(s, ';');
     bool has_format = false;
-    for (auto &split : splits) {
+    for (auto &split: splits) {
         auto kv = string_split(split, ':');
-        if (kv.size() != 2)
+        if (kv.size() != 2) {
             continue;
+        }
         auto k = kv[0];
         auto v = kv[1];
         if (k == "format") {
@@ -427,12 +436,18 @@ PlotOptions parse_plot_options_from_env() {
     return options;
 }
 
-void plot_alloc_actions(std::vector<AllocAction> actions,
-                        PlotOptions const &options) {
-    if (actions.empty()) return;
-    std::sort(actions.begin(), actions.end(), [](AllocAction const &a, AllocAction const &b) {
-        return a.time < b.time;
-    });
+} // namespace
+
+void mallocvis_plot_alloc_actions(std::vector<AllocAction> actions) {
+    PlotOptions options = parse_plot_options_from_env();
+
+    if (actions.empty()) {
+        return;
+    }
+    std::sort(actions.begin(), actions.end(),
+              [](AllocAction const &a, AllocAction const &b) {
+                  return a.time < b.time;
+              });
 
     std::cerr << "Ploting " << actions.size() << " actions...\n";
     std::map<void *, LifeBlock> living;
@@ -448,10 +463,10 @@ void plot_alloc_actions(std::vector<AllocAction> actions,
             continue;
         }
         if (kAllocOpIsAllocation[(size_t)action.op]) {
-            living.insert(
-                {action.ptr,
-                 {action.op, action.op, action.tid, action.tid, action.ptr, action.size,
-                  action.caller, action.caller, action.time, action.time}});
+            living.insert({action.ptr,
+                           {action.op, action.op, action.tid, action.tid,
+                            action.ptr, action.size, action.caller,
+                            action.caller, action.time, action.time}});
         } else {
             auto it = living.find(action.ptr);
             if (it != living.end()) {
@@ -520,7 +535,9 @@ void plot_alloc_actions(std::vector<AllocAction> actions,
     }
     living.clear();
 
-    if (dead.empty()) return;
+    if (dead.empty()) {
+        return;
+    }
 
     if (options.format == PlotOptions::Obj) {
         ObjWriter obj(options.path.empty() ? "malloc.obj" : options.path);
@@ -536,12 +553,14 @@ void plot_alloc_actions(std::vector<AllocAction> actions,
         double height_scale = 1.0 / max_height;
 
         std::cerr << "Finding maximum Z...\n";
-        auto eval_z = [&] (LifeBlock const &block) -> std::pair<double, double> {
+        auto eval_z = [&](LifeBlock const &block) -> std::pair<double, double> {
             double z0 = 0;
             double z1 = 0;
             if (options.z_indicates == PlotOptions::Caller) {
-                z0 = ((uintptr_t)block.start_caller - start_caller) * caller_scale;
-                z1 = ((uintptr_t)block.end_caller - start_caller) * caller_scale;
+                z0 = ((uintptr_t)block.start_caller - start_caller) *
+                     caller_scale;
+                z1 =
+                    ((uintptr_t)block.end_caller - start_caller) * caller_scale;
             } else if (options.z_indicates == PlotOptions::Thread) {
                 z0 = tids.at(block.start_tid);
                 z1 = tids.at(block.end_tid);
@@ -610,21 +629,23 @@ void plot_alloc_actions(std::vector<AllocAction> actions,
 
         auto eval_color =
             [&](LifeBlock const &block) -> std::pair<std::string, std::string> {
-                return {caller_color(block.start_caller),
+            return {caller_color(block.start_caller),
                     caller_color(block.end_caller)};
-            };
+        };
 
         auto eval_text =
             [](LifeBlock const &block) -> std::pair<std::string, std::string> {
-                return {addr2sym(block.start_caller), addr2sym(block.end_caller)};
-            };
+            return {addr2sym(block.start_caller), addr2sym(block.end_caller)};
+        };
 
-        SvgWriter svg(options.path.empty() ? "malloc.html" : options.path, total_width, total_height, options.svg_margin);
+        SvgWriter svg(options.path.empty() ? "malloc.html" : options.path,
+                      total_width, total_height, options.svg_margin);
         double y = 0;
         std::cerr << "Generating SVG graph...\n";
         if (options.layout == PlotOptions::Address) {
             for (auto const &block: dead) {
-                double width = (block.end_time - block.start_time) * width_scale;
+                double width =
+                    (block.end_time - block.start_time) * width_scale;
                 double height = block.size * height_scale;
                 double y = ((uintptr_t)block.ptr - start_ptr) * height_scale;
                 double x = (block.start_time - start_time) * width_scale;
@@ -633,37 +654,44 @@ void plot_alloc_actions(std::vector<AllocAction> actions,
                 svg.rect(x, y, width, height, gradColor);
                 if (options.show_text) {
                     auto [text1, text2] = eval_text(block);
-                    auto fontHeight = std::min((size_t)(height * options.text_height_fraction + 0.5),
-                                               options.text_max_height);
+                    auto fontHeight = std::min(
+                        (size_t)(height * options.text_height_fraction + 0.5),
+                        options.text_max_height);
                     if (!text1.empty()) {
                         auto max_width = options.svg_margin + x;
                         auto fontHeight1 = fontHeight;
                         if (fontHeight * 0.5 * text1.size() > max_width) {
-                            fontHeight1 *= max_width / (fontHeight * 0.5 * text1.size());
+                            fontHeight1 *=
+                                max_width / (fontHeight * 0.5 * text1.size());
                         }
-                        svg.text(x, y + height * 0.5, color1,
-                                 " style=\"dominant-baseline:central;text-anchor:"
-                                 "end;font-size:" +
-                                 std::to_string(fontHeight1) + "px;\"",
-                                 text1);
+                        svg.text(
+                            x, y + height * 0.5, color1,
+                            " style=\"dominant-baseline:central;text-anchor:"
+                            "end;font-size:" +
+                                std::to_string(fontHeight1) + "px;\"",
+                            text1);
                     }
                     if (!text2.empty()) {
-                        auto max_width = options.svg_width + options.svg_margin - x;
+                        auto max_width =
+                            options.svg_width + options.svg_margin - x;
                         auto fontHeight1 = fontHeight;
                         if (fontHeight * 0.5 * text2.size() > max_width) {
-                            fontHeight1 *= max_width / (fontHeight * 0.5 * text2.size());
+                            fontHeight1 *=
+                                max_width / (fontHeight * 0.5 * text2.size());
                         }
-                        svg.text(x + width, y + height * 0.5, color2,
-                                 " style=\"dominant-baseline:central;text-anchor:"
-                                 "start;font-size:" +
-                                 std::to_string(fontHeight1) + "px;\"",
-                                 text2);
+                        svg.text(
+                            x + width, y + height * 0.5, color2,
+                            " style=\"dominant-baseline:central;text-anchor:"
+                            "start;font-size:" +
+                                std::to_string(fontHeight1) + "px;\"",
+                            text2);
                     }
                 }
             }
         } else {
             for (auto const &block: dead) {
-                double width = (block.end_time - block.start_time) * width_scale;
+                double width =
+                    (block.end_time - block.start_time) * width_scale;
                 double height = eval_height(block) * height_scale;
                 double x = (block.start_time - start_time) * width_scale;
                 auto [color1, color2] = eval_color(block);
@@ -671,31 +699,37 @@ void plot_alloc_actions(std::vector<AllocAction> actions,
                 svg.rect(x, y, width, height, gradColor);
                 if (options.show_text) {
                     auto [text1, text2] = eval_text(block);
-                    auto fontHeight = std::min((size_t)(height * options.text_height_fraction + 0.5),
-                                               options.text_max_height);
+                    auto fontHeight = std::min(
+                        (size_t)(height * options.text_height_fraction + 0.5),
+                        options.text_max_height);
                     if (!text1.empty()) {
                         auto max_width = options.svg_margin + x;
                         auto fontHeight1 = fontHeight;
                         if (fontHeight * 0.5 * text1.size() > max_width) {
-                            fontHeight1 *= max_width / (fontHeight * 0.5 * text1.size());
+                            fontHeight1 *=
+                                max_width / (fontHeight * 0.5 * text1.size());
                         }
-                        svg.text(x, y + height * 0.5, color1,
-                                 " style=\"dominant-baseline:central;text-anchor:"
-                                 "end;font-size:" +
-                                 std::to_string(fontHeight1) + "px;\"",
-                                 text1);
+                        svg.text(
+                            x, y + height * 0.5, color1,
+                            " style=\"dominant-baseline:central;text-anchor:"
+                            "end;font-size:" +
+                                std::to_string(fontHeight1) + "px;\"",
+                            text1);
                     }
                     if (!text2.empty()) {
-                        auto max_width = options.svg_width + options.svg_margin - x;
+                        auto max_width =
+                            options.svg_width + options.svg_margin - x;
                         auto fontHeight1 = fontHeight;
                         if (fontHeight * 0.5 * text2.size() > max_width) {
-                            fontHeight1 *= max_width / (fontHeight * 0.5 * text2.size());
+                            fontHeight1 *=
+                                max_width / (fontHeight * 0.5 * text2.size());
                         }
-                        svg.text(x + width, y + height * 0.5, color2,
-                                 " style=\"dominant-baseline:central;text-anchor:"
-                                 "start;font-size:" +
-                                 std::to_string(fontHeight1) + "px;\"",
-                                 text2);
+                        svg.text(
+                            x + width, y + height * 0.5, color2,
+                            " style=\"dominant-baseline:central;text-anchor:"
+                            "start;font-size:" +
+                                std::to_string(fontHeight1) + "px;\"",
+                            text2);
                     }
                 }
                 y += height;
@@ -705,7 +739,7 @@ void plot_alloc_actions(std::vector<AllocAction> actions,
         std::cerr << "Writing SVG file...\n";
 
     } else if (options.format == PlotOptions::Console) {
-        const int64_t screen_width = 60;
+        int64_t const screen_width = 60;
         auto repeat = [&](int64_t d, char const *s, char const *end) {
             size_t n = std::max(d * screen_width, (int64_t)0) /
                        (end_time - start_time + 1);
