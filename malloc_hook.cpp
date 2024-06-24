@@ -18,7 +18,7 @@
 # include <windows.h>
 # define MALLOCVIS_EXPORT __declspec(dllexport)
 #endif
-#if __cplusplus >= 201703L
+#if __cplusplus >= 201703L || __cpp_lib_memory_resource
 # include <memory_resource>
 #endif
 #if __cpp_lib_memory_resource
@@ -47,9 +47,16 @@ uint32_t get_thread_id() {
 
 struct alignas(64) PerThreadData {
 #if HAS_PMR
-    size_t bufsz = 64 * 1024 * 1024;
+    const size_t bufsz = 64 * 1024 * 1024;
+#if __unix__
     void *buf = mmap(nullptr, bufsz, PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#elif _WIN32
+    void *buf = VirtualAlloc(nullptr, bufsz, MEM_RESERVE | MEM_COMMIT,
+                             PAGE_READWRITE);
+#else
+    static char buf[bufsz];
+#endif
     std::pmr::monotonic_buffer_resource mono{buf, bufsz};
     std::pmr::unsynchronized_pool_resource pool{&mono};
 #endif
@@ -93,9 +100,16 @@ struct GlobalData {
 #if HAS_THREADS
     void export_thread_entry(std::string const &path) {
 # if HAS_PMR
-        size_t bufsz = 64 * 1024 * 1024;
+        const size_t bufsz = 64 * 1024 * 1024;
+# if __unix__
         void *buf = mmap(nullptr, bufsz, PROT_READ | PROT_WRITE,
                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+# elif _WIN32
+        void *buf = VirtualAlloc(nullptr, bufsz, MEM_RESERVE | MEM_COMMIT,
+                                 PAGE_READWRITE);
+# else
+        static char buf[bufsz];
+# endif
         std::pmr::monotonic_buffer_resource mono{buf, bufsz};
         std::pmr::unsynchronized_pool_resource pool{&mono};
 # endif
