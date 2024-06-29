@@ -281,7 +281,6 @@ static void *msvc_reallocarray(void *ptr, size_t nmemb, size_t size) noexcept {
 # define RETURN_ADDRESS       ((void *)1)
 #endif
 
-#undef MAY_OVERRIDE_MALLOC //
 #if MAY_OVERRIDE_MALLOC
 MALLOCVIS_EXPORT extern "C" void *malloc(size_t size) noexcept {
     EnableGuard ena;
