@@ -1,6 +1,6 @@
 # mallocvis
 
-mallocvis是一个小彭老师自主研发的一款用于可视化C/C++程序中动态内存分配的工具。它可以帮助开发者更直观地了解程序中的内存分配情况，从而更容易发现内存泄漏、内存碎片化或者内存使用不当的问题。
+mallocvis是一个小彭老师自主研发的一款用于可视化C/C++程序中动态内存分配的工具。它可以帮助开发者更直观地了解程序中的内存分配情况，从而更容易发现内存泄漏、内存碎片化或者内存使用不当的问题。支持 Linux 和 Windows 系统。
 
 mallocvis的工作原理是通过hook C/C++中的内存分配函数，如malloc、free、realloc、operator new、operator delete等，来跟踪程序中的内存分配和释放操作。它将跟踪到的内存分配信息以可视化的形式展示出来，包括内存块的大小、地址和持续时间等。
 
@@ -54,7 +54,7 @@ export MALLOCVIS="format:svg;path:malloc.html;height_scale:log;z_indicates:threa
 
 # Mallocvis
 
-Mallocvis is a tool developed by Xiaopeng to visualize dynamic memory allocation in C/C++ programs. It helps developers get a better understanding of memory allocation in their programs, making it easier to detect memory leaks, memory fragmentation, or improper memory usage.
+Mallocvis is a tool developed by Xiaopeng to visualize dynamic memory allocation in C/C++ programs. It helps developers get a better understanding of memory allocation in their programs, making it easier to detect memory leaks, memory fragmentation, or improper memory usage. Linux and Windows systems are supported.
 
 The working principle of mallocvis is to hook memory allocation functions in C/C++, such as malloc, free, realloc, operator new, operator delete, etc., to track memory allocation and deallocation operations in the program. It visualizes the tracked memory allocation information, including the size, address, and duration of the memory blocks.
 
