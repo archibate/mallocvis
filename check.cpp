@@ -27,48 +27,46 @@ struct GlobalData {
     }
 
     void on(AllocOp op, void *ptr, size_t size, size_t align, void *caller) {
-        if (ptr) {
-            // printf("%s(ptr=%p, size=%zd, align=%zd, caller=%p)\n",
-            // kAllocOpNames[(size_t)op], ptr, size, align, caller);
-            std::lock_guard<std::mutex> guard(lock);
-            if (kAllocOpIsAllocation[(size_t)op]) {
-                if (!allocated
-                         .insert({ptr, AllocAction{op, 0, ptr, size, align,
-                                                   caller, 0}})
-                         .second) {
-                    printf("检测到内存多次分配同一个地址 ptr = %p, size = %zd, "
-                           "caller = %s\n",
-                           ptr, size, addr2sym(caller).c_str());
+        if (!ptr) return;
+
+        // printf("%s(ptr=%p, size=%zd, align=%zd, caller=%p)\n",
+        // kAllocOpNames[(size_t)op], ptr, size, align, caller);
+        std::lock_guard<std::mutex> guard(lock);
+        if (kAllocOpIsAllocation[(size_t)op]) {
+            auto result = allocated.insert({ptr, AllocAction{op, 0, ptr, size, align, caller, 0}});
+            if (!result.second) {
+                printf("检测到内存多次分配同一个地址 ptr = %p, size = %zd, "
+                        "caller = %s\n",
+                        ptr, size, addr2sym(caller).c_str());
+            }
+        } else {
+            auto it = allocated.find(ptr);
+            if (it == allocated.end()) {
+                printf("检测到尝试释放不存在的内存 ptr = %p, size = %zd, "
+                        "caller = %s\n",
+                        ptr, size, addr2sym(caller).c_str());
+                return;
+            } 
+
+            const AllocAction& action = it->second;
+            bool wrong_free_func = kAllocOpFreeFunction[(size_t)action.op] != op;
+            bool wrong_size = (size != kNone && action.size != size);
+            bool wrong_align = (align != kNone && action.align != align);
+
+            if (wrong_free_func || wrong_size || wrong_align) {
+                printf("检测到内存释放错误 ptr = %p, size = %zd, caller = %s\n",
+                    ptr, action.size, addr2sym(caller).c_str());
+                if (wrong_free_func) {
+                    printf("使用了错误的释放函数\n");
                 }
-            } else {
-                auto it = allocated.find(ptr);
-                if (it == allocated.end()) {
-                    printf("检测到尝试释放不存在的内存 ptr = %p, size = %zd, "
-                           "caller = %s\n",
-                           ptr, size, addr2sym(caller).c_str());
-                } else {
-                    if (kAllocOpFreeFunction[(size_t)it->second.op] != op) {
-                        printf("检测到内存释放时使用了错误的释放函数 ptr = %p, "
-                               "size = %zd, caller = %s\n",
-                               ptr, size, addr2sym(caller).c_str());
-                    }
-                    if (size != kNone) {
-                        if (it->second.size != size) {
-                            printf("检测到内存释放时指定了错误的大小 ptr = %p, "
-                                   "size = %zd, caller = %s\n",
-                                   ptr, size, addr2sym(caller).c_str());
-                        }
-                    }
-                    if (align != kNone) {
-                        if (it->second.align != align) {
-                            printf("检测到内存释放时指定了错误的对齐 ptr = %p, "
-                                   "size = %zd, align = %zd, caller = %s\n",
-                                   ptr, size, align, addr2sym(caller).c_str());
-                        }
-                    }
-                    allocated.erase(it);
+                if (wrong_size) {
+                    printf("指定了错误的大小 size = %zd, 正确大小 = %zd\n", size, action.size);
+                }
+                if (wrong_align) {
+                    printf("指定了错误的对齐 align = %zd, 正确对齐 = %zd\n", align, action.align);
                 }
             }
+            allocated.erase(it);
         }
     }
 } global;
