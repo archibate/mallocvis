@@ -170,33 +170,6 @@ struct GlobalData {
 
 GlobalData *global = nullptr;
 
-#if __GNUC__
-alignas(GlobalData) char global_buf[sizeof(GlobalData)];
-
-# define GLOBAL_INIT_PRIORITY 101
-
-# if __has_attribute(__constructor__) && __has_attribute(__destructor__)
-__attribute__((__constructor__(GLOBAL_INIT_PRIORITY))) void
-global_initialize() {
-    global = new (&global_buf) GlobalData();
-}
-
-__attribute__((__destructor__(GLOBAL_INIT_PRIORITY))) void
-global_deinitialize() {
-    if (global) {
-        global->~GlobalData();
-        global = nullptr;
-    }
-}
-# else
-GlobalData global_buf;
-int global_initialize = (global = &global_buf, 0);
-# endif
-#else
-GlobalData global_buf;
-int global_initialize = (global = &global_buf, 0);
-#endif
-
 struct EnableGuard {
     uint32_t tid;
     bool was_enable;
@@ -631,4 +604,28 @@ MALLOCVIS_EXPORT void *operator new[](size_t size, std::align_val_t align,
     return ptr;
 }
 # endif
+#endif
+
+#if MANUAL_GLOBAL_INIT
+alignas(GlobalData) static char global_buf[sizeof(GlobalData)];
+
+// # if __has_attribute(__constructor__) && __has_attribute(__destructor__)
+// #  define GLOBAL_INIT_PRIORITY 101
+// # endif
+
+// __attribute__((__constructor__(GLOBAL_INIT_PRIORITY)))
+void mallocvis_init() {
+    global = new (&global_buf) GlobalData();
+}
+
+// __attribute__((__destructor__(GLOBAL_INIT_PRIORITY)))
+void mallocvis_deinit() {
+    if (global) {
+        global->~GlobalData();
+        global = nullptr;
+    }
+}
+#else
+static GlobalData global_buf;
+static int global_init_helper = (global = &global_buf, 0);
 #endif
