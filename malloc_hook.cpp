@@ -47,16 +47,16 @@ uint32_t get_thread_id() {
 
 struct alignas(64) PerThreadData {
 #if HAS_PMR
-    const size_t bufsz = 64 * 1024 * 1024;
-#if __unix__
+    size_t const bufsz = 64 * 1024 * 1024;
+# if __unix__
     void *buf = mmap(nullptr, bufsz, PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-#elif _WIN32
-    void *buf = VirtualAlloc(nullptr, bufsz, MEM_RESERVE | MEM_COMMIT,
-                             PAGE_READWRITE);
-#else
+# elif _WIN32
+    void *buf =
+        VirtualAlloc(nullptr, bufsz, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+# else
     static char buf[bufsz];
-#endif
+# endif
     std::pmr::monotonic_buffer_resource mono{buf, bufsz};
     std::pmr::unsynchronized_pool_resource pool{&mono};
 #endif
@@ -82,7 +82,7 @@ struct GlobalData {
         if (0) {
             std::string path = "malloc.fifo";
             export_thread = std::thread([this, path] {
-                get_per_thread(get_thread_id()).enable = false;
+                get_per_thread(get_thread_id())->enable = false;
                 export_thread_entry(path);
             });
             export_plot_on_exit = false;
@@ -93,23 +93,23 @@ struct GlobalData {
         }
     }
 
-    PerThreadData &get_per_thread(uint32_t tid) {
-        return per_threads[((size_t)tid * 17) % kPerThreadsCount];
+    PerThreadData *get_per_thread(uint32_t tid) {
+        return per_threads + ((size_t)tid * 17) % kPerThreadsCount;
     }
 
 #if HAS_THREADS
     void export_thread_entry(std::string const &path) {
 # if HAS_PMR
-        const size_t bufsz = 64 * 1024 * 1024;
-# if __unix__
+        size_t const bufsz = 64 * 1024 * 1024;
+#  if __unix__
         void *buf = mmap(nullptr, bufsz, PROT_READ | PROT_WRITE,
                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-# elif _WIN32
+#  elif _WIN32
         void *buf = VirtualAlloc(nullptr, bufsz, MEM_RESERVE | MEM_COMMIT,
                                  PAGE_READWRITE);
-# else
+#  else
         static char buf[bufsz];
-# endif
+#  endif
         std::pmr::monotonic_buffer_resource mono{buf, bufsz};
         std::pmr::unsynchronized_pool_resource pool{&mono};
 # endif
@@ -166,50 +166,71 @@ struct GlobalData {
             mallocvis_plot_alloc_actions(std::move(actions));
         }
     }
-} global;
+};
+
+GlobalData *global = nullptr;
+
+#if __GNUC__
+alignas(GlobalData) char global_buf[sizeof(GlobalData)];
+
+#define PRIO 101
+
+#if __has_attribute(__constructor__) && __has_attribute(__destructor__)
+__attribute__((__constructor__(PRIO))) void global_initialize() {
+    global = new (&global_buf) GlobalData();
+}
+
+__attribute__((__destructor__(PRIO))) void global_deinitialize() {
+    if (global)
+        global->~GlobalData();
+}
+#else
+GlobalData global_buf;
+int global_initialize = (global = &global_buf, 0);
+#endif
+#else
+GlobalData global_buf;
+int global_initialize = (global = &global_buf, 0);
+#endif
 
 struct EnableGuard {
     uint32_t tid;
     bool was_enable;
-    PerThreadData &per_thread;
+    PerThreadData *per_thread;
 
     EnableGuard()
         : tid(get_thread_id()),
-          per_thread(global.get_per_thread(tid)) {
-        per_thread.lock.lock();
-        was_enable = per_thread.enable;
-        per_thread.enable = false;
+          per_thread(global ? global->get_per_thread(tid) : nullptr) {
+        if (!per_thread) {
+            was_enable = false;
+        } else {
+            per_thread->lock.lock();
+            was_enable = per_thread->enable;
+            per_thread->enable = false;
+        }
     }
 
     explicit operator bool() const {
-        // if (!was_enable) {
-        //     printf("Oh %p\n", __builtin_return_address(2));
-        //     // printf("Oh %s\n",
-        //     addr2sym(__builtin_return_address(2)).c_str()); void *addr =
-        //     __builtin_return_address(2); backtrace_symbols_fd(&addr, 1, 1);
-        // }
         return was_enable;
     }
 
     void on(AllocOp op, void *ptr, size_t size, size_t align,
             void *caller) const {
-        // if ((uintptr_t)ptr >= 0x7000'0000'0000) {
-        //     // printf("%p %d %zd %s\n", ptr, (int)op, size,
-        //     addr2sym(caller).c_str()); return;
-        // }
         if (ptr) {
             auto now = std::chrono::high_resolution_clock::now();
             int64_t time = std::chrono::duration_cast<std::chrono::nanoseconds>(
                                now.time_since_epoch())
                                .count();
-            per_thread.actions.push_back(
+            per_thread->actions.push_back(
                 AllocAction{op, tid, ptr, size, align, caller, time});
         }
     }
 
     ~EnableGuard() {
-        per_thread.enable = was_enable;
-        per_thread.lock.unlock();
+        if (per_thread) {
+            per_thread->enable = was_enable;
+            per_thread->lock.unlock();
+        }
     }
 };
 
@@ -224,9 +245,13 @@ extern "C" void *__libc_reallocarray(void *ptr, size_t nmemb,
                                      size_t size) noexcept;
 extern "C" void *__libc_valloc(size_t size) noexcept;
 extern "C" void *__libc_memalign(size_t align, size_t size) noexcept;
-# define REAL_LIBC(name)      __libc_##name
-# define MAY_OVERRIDE_MALLOC  1
-# define MAY_SUPPORT_MEMALIGN 1
+# define REAL_LIBC(name) __libc_##name
+# ifndef MAY_OVERRIDE_MALLOC
+#  define MAY_OVERRIDE_MALLOC 1
+# endif
+# ifndef MAY_OVERRIDE_MEMALIGN
+#  define MAY_SUPPORT_MEMALIGN 1
+# endif
 # undef RETURN_ADDRESS
 # ifdef __has_builtin
 #  if __has_builtin(__builtin_return_address)
@@ -265,9 +290,13 @@ static void *msvc_reallocarray(void *ptr, size_t nmemb, size_t size) noexcept {
     return msvc_realloc(ptr, nmemb * size);
 }
 
-# define REAL_LIBC(name)      msvc_##name
-# define MAY_OVERRIDE_MALLOC  1
-# define MAY_SUPPORT_MEMALIGN 0
+# define REAL_LIBC(name) msvc_##name
+# ifndef MAY_OVERRIDE_MALLOC
+#  define MAY_OVERRIDE_MALLOC 0
+# endif
+# ifndef MAY_OVERRIDE_MEMALIGN
+#  define MAY_SUPPORT_MEMALIGN 0
+# endif
 
 # include <intrin.h>
 
@@ -275,10 +304,14 @@ static void *msvc_reallocarray(void *ptr, size_t nmemb, size_t size) noexcept {
 # define RETURN_ADDRESS _ReturnAddress()
 
 #else
-# define REAL_LIBC(name)      name
-# define MAY_OVERRIDE_MALLOC  0
-# define MAY_SUPPORT_MEMALIGN 0
-# define RETURN_ADDRESS       ((void *)1)
+# define REAL_LIBC(name) name
+# ifndef MAY_OVERRIDE_MALLOC
+#  define MAY_OVERRIDE_MALLOC 0
+# endif
+# ifndef MAY_OVERRIDE_MEMALIGN
+#  define MAY_SUPPORT_MEMALIGN 0
+# endif
+# define RETURN_ADDRESS ((void *)1)
 #endif
 
 #if MAY_OVERRIDE_MALLOC
@@ -321,7 +354,7 @@ MALLOCVIS_EXPORT extern "C" void *realloc(void *ptr, size_t size) noexcept {
 }
 
 MALLOCVIS_EXPORT extern "C" void *reallocarray(void *ptr, size_t nmemb,
-                                        size_t size) noexcept {
+                                               size_t size) noexcept {
     EnableGuard ena;
     void *new_ptr = REAL_LIBC(reallocarray)(ptr, nmemb, size);
     if (ena) {
@@ -362,7 +395,8 @@ MALLOCVIS_EXPORT extern "C" void *memalign(size_t align, size_t size) noexcept {
     return ptr;
 }
 
-MALLOCVIS_EXPORT extern "C" void *aligned_alloc(size_t align, size_t size) noexcept {
+MALLOCVIS_EXPORT extern "C" void *aligned_alloc(size_t align,
+                                                size_t size) noexcept {
     EnableGuard ena;
     void *ptr = REAL_LIBC(memalign)(align, size);
     if (ena) {
@@ -372,7 +406,7 @@ MALLOCVIS_EXPORT extern "C" void *aligned_alloc(size_t align, size_t size) noexc
 }
 
 MALLOCVIS_EXPORT extern "C" int posix_memalign(void **memptr, size_t align,
-                                        size_t size) noexcept {
+                                               size_t size) noexcept {
     EnableGuard ena;
     void *ptr = REAL_LIBC(memalign)(align, size);
     if (ena) {
@@ -405,7 +439,8 @@ MALLOCVIS_EXPORT void operator delete[](void *ptr) noexcept {
     REAL_LIBC(free)(ptr);
 }
 
-MALLOCVIS_EXPORT void operator delete(void *ptr, std::nothrow_t const &) noexcept {
+MALLOCVIS_EXPORT void operator delete(void *ptr,
+                                      std::nothrow_t const &) noexcept {
     EnableGuard ena;
     if (ena) {
         ena.on(AllocOp::Delete, ptr, kNone, kNone, RETURN_ADDRESS);
@@ -413,7 +448,8 @@ MALLOCVIS_EXPORT void operator delete(void *ptr, std::nothrow_t const &) noexcep
     REAL_LIBC(free)(ptr);
 }
 
-MALLOCVIS_EXPORT void operator delete[](void *ptr, std::nothrow_t const &) noexcept {
+MALLOCVIS_EXPORT void operator delete[](void *ptr,
+                                        std::nothrow_t const &) noexcept {
     EnableGuard ena;
     if (ena) {
         ena.on(AllocOp::DeleteArray, ptr, kNone, kNone, RETURN_ADDRESS);
@@ -445,7 +481,8 @@ MALLOCVIS_EXPORT void *operator new[](size_t size) noexcept(false) {
     return ptr;
 }
 
-MALLOCVIS_EXPORT void *operator new(size_t size, std::nothrow_t const &) noexcept {
+MALLOCVIS_EXPORT void *operator new(size_t size,
+                                    std::nothrow_t const &) noexcept {
     EnableGuard ena;
     void *ptr = REAL_LIBC(malloc)(size);
     if (ena) {
@@ -454,7 +491,8 @@ MALLOCVIS_EXPORT void *operator new(size_t size, std::nothrow_t const &) noexcep
     return ptr;
 }
 
-MALLOCVIS_EXPORT void *operator new[](size_t size, std::nothrow_t const &) noexcept {
+MALLOCVIS_EXPORT void *operator new[](size_t size,
+                                      std::nothrow_t const &) noexcept {
     EnableGuard ena;
     void *ptr = REAL_LIBC(malloc)(size);
     if (ena) {
@@ -483,7 +521,8 @@ MALLOCVIS_EXPORT void operator delete[](void *ptr, size_t size) noexcept {
 
 #if (__cplusplus > 201402L || defined(__cpp_aligned_new))
 # if MAY_SUPPORT_MEMALIGN
-MALLOCVIS_EXPORT void operator delete(void *ptr, std::align_val_t align) noexcept {
+MALLOCVIS_EXPORT void operator delete(void *ptr,
+                                      std::align_val_t align) noexcept {
     EnableGuard ena;
     if (ena) {
         ena.on(AllocOp::Delete, ptr, kNone, (size_t)align, RETURN_ADDRESS);
@@ -491,7 +530,8 @@ MALLOCVIS_EXPORT void operator delete(void *ptr, std::align_val_t align) noexcep
     REAL_LIBC(free)(ptr);
 }
 
-MALLOCVIS_EXPORT void operator delete[](void *ptr, std::align_val_t align) noexcept {
+MALLOCVIS_EXPORT void operator delete[](void *ptr,
+                                        std::align_val_t align) noexcept {
     EnableGuard ena;
     if (ena) {
         ena.on(AllocOp::DeleteArray, ptr, kNone, (size_t)align, RETURN_ADDRESS);
@@ -500,7 +540,7 @@ MALLOCVIS_EXPORT void operator delete[](void *ptr, std::align_val_t align) noexc
 }
 
 MALLOCVIS_EXPORT void operator delete(void *ptr, size_t size,
-                               std::align_val_t align) noexcept {
+                                      std::align_val_t align) noexcept {
     EnableGuard ena;
     if (ena) {
         ena.on(AllocOp::Delete, ptr, size, (size_t)align, RETURN_ADDRESS);
@@ -509,7 +549,7 @@ MALLOCVIS_EXPORT void operator delete(void *ptr, size_t size,
 }
 
 MALLOCVIS_EXPORT void operator delete[](void *ptr, size_t size,
-                                 std::align_val_t align) noexcept {
+                                        std::align_val_t align) noexcept {
     EnableGuard ena;
     if (ena) {
         ena.on(AllocOp::DeleteArray, ptr, size, (size_t)align, RETURN_ADDRESS);
@@ -518,7 +558,7 @@ MALLOCVIS_EXPORT void operator delete[](void *ptr, size_t size,
 }
 
 MALLOCVIS_EXPORT void operator delete(void *ptr, std::align_val_t align,
-                               std::nothrow_t const &) noexcept {
+                                      std::nothrow_t const &) noexcept {
     EnableGuard ena;
     if (ena) {
         ena.on(AllocOp::Delete, ptr, kNone, (size_t)align, RETURN_ADDRESS);
@@ -527,7 +567,7 @@ MALLOCVIS_EXPORT void operator delete(void *ptr, std::align_val_t align,
 }
 
 MALLOCVIS_EXPORT void operator delete[](void *ptr, std::align_val_t align,
-                                 std::nothrow_t const &) noexcept {
+                                        std::nothrow_t const &) noexcept {
     EnableGuard ena;
     if (ena) {
         ena.on(AllocOp::DeleteArray, ptr, kNone, (size_t)align, RETURN_ADDRESS);
@@ -536,7 +576,7 @@ MALLOCVIS_EXPORT void operator delete[](void *ptr, std::align_val_t align,
 }
 
 MALLOCVIS_EXPORT void *operator new(size_t size,
-                             std::align_val_t align) noexcept(false) {
+                                    std::align_val_t align) noexcept(false) {
     EnableGuard ena;
     void *ptr = REAL_LIBC(memalign)((size_t)align, size);
     if (ena) {
@@ -549,7 +589,7 @@ MALLOCVIS_EXPORT void *operator new(size_t size,
 }
 
 MALLOCVIS_EXPORT void *operator new[](size_t size,
-                               std::align_val_t align) noexcept(false) {
+                                      std::align_val_t align) noexcept(false) {
     EnableGuard ena;
     void *ptr = REAL_LIBC(memalign)((size_t)align, size);
     if (ena) {
@@ -562,7 +602,7 @@ MALLOCVIS_EXPORT void *operator new[](size_t size,
 }
 
 MALLOCVIS_EXPORT void *operator new(size_t size, std::align_val_t align,
-                             std::nothrow_t const &) noexcept {
+                                    std::nothrow_t const &) noexcept {
     EnableGuard ena;
     void *ptr = REAL_LIBC(memalign)((size_t)align, size);
     if (ena) {
@@ -572,7 +612,7 @@ MALLOCVIS_EXPORT void *operator new(size_t size, std::align_val_t align,
 }
 
 MALLOCVIS_EXPORT void *operator new[](size_t size, std::align_val_t align,
-                               std::nothrow_t const &) noexcept {
+                                      std::nothrow_t const &) noexcept {
     EnableGuard ena;
     void *ptr = REAL_LIBC(memalign)((size_t)align, size);
     if (ena) {

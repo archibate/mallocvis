@@ -14,6 +14,8 @@
 
 using namespace std::chrono_literals;
 
+std::vector<int> a(4);
+
 int main() {
     { // vector
         std::vector<int> a;
