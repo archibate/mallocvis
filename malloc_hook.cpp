@@ -173,16 +173,18 @@ GlobalData *global = nullptr;
 #if __GNUC__
 alignas(GlobalData) char global_buf[sizeof(GlobalData)];
 
-#define PRIO 101
+#define GLOBAL_INIT_PRIORITY 101
 
 #if __has_attribute(__constructor__) && __has_attribute(__destructor__)
-__attribute__((__constructor__(PRIO))) void global_initialize() {
+__attribute__((__constructor__(GLOBAL_INIT_PRIORITY))) void global_initialize() {
     global = new (&global_buf) GlobalData();
 }
 
-__attribute__((__destructor__(PRIO))) void global_deinitialize() {
-    if (global)
+__attribute__((__destructor__(GLOBAL_INIT_PRIORITY))) void global_deinitialize() {
+    if (global) {
         global->~GlobalData();
+        global = nullptr;
+    }
 }
 #else
 GlobalData global_buf;
