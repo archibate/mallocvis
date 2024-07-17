@@ -173,23 +173,25 @@ GlobalData *global = nullptr;
 #if __GNUC__
 alignas(GlobalData) char global_buf[sizeof(GlobalData)];
 
-#define GLOBAL_INIT_PRIORITY 101
+# define GLOBAL_INIT_PRIORITY 101
 
-#if __has_attribute(__constructor__) && __has_attribute(__destructor__)
-__attribute__((__constructor__(GLOBAL_INIT_PRIORITY))) void global_initialize() {
+# if __has_attribute(__constructor__) && __has_attribute(__destructor__)
+__attribute__((__constructor__(GLOBAL_INIT_PRIORITY))) void
+global_initialize() {
     global = new (&global_buf) GlobalData();
 }
 
-__attribute__((__destructor__(GLOBAL_INIT_PRIORITY))) void global_deinitialize() {
+__attribute__((__destructor__(GLOBAL_INIT_PRIORITY))) void
+global_deinitialize() {
     if (global) {
         global->~GlobalData();
         global = nullptr;
     }
 }
-#else
+# else
 GlobalData global_buf;
 int global_initialize = (global = &global_buf, 0);
-#endif
+# endif
 #else
 GlobalData global_buf;
 int global_initialize = (global = &global_buf, 0);
@@ -271,6 +273,7 @@ extern "C" void *__libc_memalign(size_t align, size_t size) noexcept;
 #  define RETURN_ADDRESS ((void *)0)
 #  pragma message("Cannot find __builtin_return_address")
 # endif
+# define CSTDLIB_NOEXCEPT noexcept
 #elif _MSC_VER
 static void *msvc_malloc(size_t size) noexcept {
     return HeapAlloc(GetProcessHeap(), 0, size);
@@ -304,6 +307,7 @@ static void *msvc_reallocarray(void *ptr, size_t nmemb, size_t size) noexcept {
 
 # pragma intrinsic(_ReturnAddress)
 # define RETURN_ADDRESS _ReturnAddress()
+# define CSTDLIB_NOEXCEPT
 
 #else
 # define REAL_LIBC(name) name
@@ -314,10 +318,11 @@ static void *msvc_reallocarray(void *ptr, size_t nmemb, size_t size) noexcept {
 #  define MAY_SUPPORT_MEMALIGN 0
 # endif
 # define RETURN_ADDRESS ((void *)1)
+# define CSTDLIB_NOEXCEPT
 #endif
 
 #if MAY_OVERRIDE_MALLOC
-MALLOCVIS_EXPORT extern "C" void *malloc(size_t size) noexcept {
+MALLOCVIS_EXPORT extern "C" void *malloc(size_t size) CSTDLIB_NOEXCEPT {
     EnableGuard ena;
     void *ptr = REAL_LIBC(malloc)(size);
     if (ena) {
@@ -326,7 +331,7 @@ MALLOCVIS_EXPORT extern "C" void *malloc(size_t size) noexcept {
     return ptr;
 }
 
-MALLOCVIS_EXPORT extern "C" void free(void *ptr) noexcept {
+MALLOCVIS_EXPORT extern "C" void free(void *ptr) CSTDLIB_NOEXCEPT {
     EnableGuard ena;
     if (ena) {
         ena.on(AllocOp::Free, ptr, kNone, kNone, RETURN_ADDRESS);
@@ -334,7 +339,8 @@ MALLOCVIS_EXPORT extern "C" void free(void *ptr) noexcept {
     REAL_LIBC(free)(ptr);
 }
 
-MALLOCVIS_EXPORT extern "C" void *calloc(size_t nmemb, size_t size) noexcept {
+MALLOCVIS_EXPORT extern "C" void *calloc(size_t nmemb,
+                                         size_t size) CSTDLIB_NOEXCEPT {
     EnableGuard ena;
     void *ptr = REAL_LIBC(calloc)(nmemb, size);
     if (ena) {
@@ -343,7 +349,8 @@ MALLOCVIS_EXPORT extern "C" void *calloc(size_t nmemb, size_t size) noexcept {
     return ptr;
 }
 
-MALLOCVIS_EXPORT extern "C" void *realloc(void *ptr, size_t size) noexcept {
+MALLOCVIS_EXPORT extern "C" void *realloc(void *ptr,
+                                          size_t size) CSTDLIB_NOEXCEPT {
     EnableGuard ena;
     void *new_ptr = REAL_LIBC(realloc)(ptr, size);
     if (ena) {
@@ -356,7 +363,7 @@ MALLOCVIS_EXPORT extern "C" void *realloc(void *ptr, size_t size) noexcept {
 }
 
 MALLOCVIS_EXPORT extern "C" void *reallocarray(void *ptr, size_t nmemb,
-                                               size_t size) noexcept {
+                                               size_t size) CSTDLIB_NOEXCEPT {
     EnableGuard ena;
     void *new_ptr = REAL_LIBC(reallocarray)(ptr, nmemb, size);
     if (ena) {
@@ -369,7 +376,7 @@ MALLOCVIS_EXPORT extern "C" void *reallocarray(void *ptr, size_t nmemb,
 }
 
 # if MAY_SUPPORT_MEMALIGN
-MALLOCVIS_EXPORT extern "C" void *valloc(size_t size) noexcept {
+MALLOCVIS_EXPORT extern "C" void *valloc(size_t size) CSTDLIB_NOEXCEPT {
     EnableGuard ena;
     void *ptr = REAL_LIBC(valloc)(size);
     if (ena) {
@@ -388,7 +395,8 @@ MALLOCVIS_EXPORT extern "C" void *valloc(size_t size) noexcept {
     return ptr;
 }
 
-MALLOCVIS_EXPORT extern "C" void *memalign(size_t align, size_t size) noexcept {
+MALLOCVIS_EXPORT extern "C" void *memalign(size_t align,
+                                           size_t size) CSTDLIB_NOEXCEPT {
     EnableGuard ena;
     void *ptr = REAL_LIBC(memalign)(align, size);
     if (ena) {
@@ -398,7 +406,7 @@ MALLOCVIS_EXPORT extern "C" void *memalign(size_t align, size_t size) noexcept {
 }
 
 MALLOCVIS_EXPORT extern "C" void *aligned_alloc(size_t align,
-                                                size_t size) noexcept {
+                                                size_t size) CSTDLIB_NOEXCEPT {
     EnableGuard ena;
     void *ptr = REAL_LIBC(memalign)(align, size);
     if (ena) {
@@ -408,7 +416,7 @@ MALLOCVIS_EXPORT extern "C" void *aligned_alloc(size_t align,
 }
 
 MALLOCVIS_EXPORT extern "C" int posix_memalign(void **memptr, size_t align,
-                                               size_t size) noexcept {
+                                               size_t size) CSTDLIB_NOEXCEPT {
     EnableGuard ena;
     void *ptr = REAL_LIBC(memalign)(align, size);
     if (ena) {
