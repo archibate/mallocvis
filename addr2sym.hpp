@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #if __unix__
 # include <cxxabi.h>
@@ -114,3 +115,11 @@ inline std::string addr2sym(void *addr) {
     return oss.str();
 }
 #endif
+
+inline std::vector<std::string> addrList2symList(std::vector<void*> addrList) {
+    std::vector<std::string> symList;
+    for(auto addr : addrList) {
+        symList.push_back(addr2sym(addr));
+    }
+    return symList;
+}
