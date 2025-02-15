@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 enum class AllocOp {
     New,
@@ -23,7 +24,7 @@ struct AllocAction {
     void *ptr;
     size_t size;
     size_t align;
-    void *caller;
+    std::vector<void *> call_stack;
     int64_t time;
 };
 

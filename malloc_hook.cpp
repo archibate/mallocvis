@@ -192,14 +192,14 @@ struct EnableGuard {
     }
 
     void on(AllocOp op, void *ptr, size_t size, size_t align,
-            void *caller) const {
+            std::vector<void *> call_stack) const {
         if (ptr) {
             auto now = std::chrono::high_resolution_clock::now();
             int64_t time = std::chrono::duration_cast<std::chrono::nanoseconds>(
                                now.time_since_epoch())
                                .count();
             per_thread->actions.push_back(
-                AllocAction{op, tid, ptr, size, align, caller, time});
+                AllocAction{op, tid, ptr, size, align, call_stack, time});
         }
     }
 
@@ -222,6 +222,13 @@ extern "C" void *__libc_reallocarray(void *ptr, size_t nmemb,
                                      size_t size) noexcept;
 extern "C" void *__libc_valloc(size_t size) noexcept;
 extern "C" void *__libc_memalign(size_t align, size_t size) noexcept;
+
+static std::vector<void*> return_call_stack(){
+    std::vector<void*> callStack(1024);
+    callStack.resize(backtrace(callStack.data(), callStack.size()));
+    return {callStack.begin() + 1, callStack.end()};
+}
+
 # define REAL_LIBC(name) __libc_##name
 # ifndef MAY_OVERRIDE_MALLOC
 #  define MAY_OVERRIDE_MALLOC 1
@@ -230,20 +237,25 @@ extern "C" void *__libc_memalign(size_t align, size_t size) noexcept;
 #  define MAY_SUPPORT_MEMALIGN 1
 # endif
 # undef RETURN_ADDRESS
+#if __GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 1)
+# define RETURN_ADDRESS return_call_stack()
+#endif
+# ifndef RETURN_ADDRESS
 # ifdef __has_builtin
 #  if __has_builtin(__builtin_return_address)
 #   if __has_builtin(__builtin_extract_return_addr)
 #    define RETURN_ADDRESS \
-        __builtin_extract_return_addr(__builtin_return_address(0))
+        std::vector<void *>{__builtin_extract_return_addr(__builtin_return_address(0))}
 #   else
-#    define RETURN_ADDRESS __builtin_return_address(0)
+#    define RETURN_ADDRESS std::vector<void *>{__builtin_return_address(0)}
 #   endif
 #  endif
 # elif __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 8)
-#  define RETURN_ADDRESS __builtin_return_address(0)
+#  define RETURN_ADDRESS std::vector<void *>{__builtin_return_address(0)}
+# endif
 # endif
 # ifndef RETURN_ADDRESS
-#  define RETURN_ADDRESS ((void *)0)
+#  define RETURN_ADDRESS (std::vector<void *>{0})
 #  pragma message("Cannot find __builtin_return_address")
 # endif
 # define CSTDLIB_NOEXCEPT noexcept
@@ -278,8 +290,58 @@ static void *msvc_reallocarray(void *ptr, size_t nmemb, size_t size) noexcept {
 
 # include <intrin.h>
 
-# pragma intrinsic(_ReturnAddress)
-# define RETURN_ADDRESS _ReturnAddress()
+static std::vector<void*> return_call_stack(){
+    std::vector<void*> callStack;
+
+    // 获取当前上下文
+    CONTEXT context;
+    RtlCaptureContext(&context);
+
+    // 初始化 STACKFRAME64
+    STACKFRAME64 stackFrame;
+    ZeroMemory(&stackFrame, sizeof(STACKFRAME64));
+
+#ifdef _M_IX86
+    stackFrame.AddrPC.Offset = context.Eip;
+    stackFrame.AddrPC.Mode = AddrModeFlat;
+    stackFrame.AddrFrame.Offset = context.Ebp;
+    stackFrame.AddrFrame.Mode = AddrModeFlat;
+    stackFrame.AddrStack.Offset = context.Esp;
+    stackFrame.AddrStack.Mode = AddrModeFlat;
+#elif _M_X64
+    stackFrame.AddrPC.Offset = context.Rip;
+    stackFrame.AddrPC.Mode = AddrModeFlat;
+    stackFrame.AddrFrame.Offset = context.Rbp;
+    stackFrame.AddrFrame.Mode = AddrModeFlat;
+    stackFrame.AddrStack.Offset = context.Rsp;
+    stackFrame.AddrStack.Mode = AddrModeFlat;
+#endif
+
+    // 遍历堆栈
+    while (StackWalk64(
+#ifdef _M_IX86
+        IMAGE_FILE_MACHINE_I386,
+#elif _M_X64
+        IMAGE_FILE_MACHINE_AMD64,
+#endif
+        GetCurrentProcess(),
+        GetCurrentThread(),
+        &stackFrame,
+        &context,
+        NULL,
+        SymFunctionTableAccess64,
+        SymGetModuleBase64,
+        NULL)) {
+        if (stackFrame.AddrPC.Offset == 0) {
+            break; // 结束遍历
+        }
+        callStack.push_back((void*)stackFrame.AddrPC.Offset);
+    }
+
+    return {callStack.begin() + 1, callStack.end()};
+}
+
+# define RETURN_ADDRESS return_call_stack()
 # define CSTDLIB_NOEXCEPT
 
 #else
@@ -290,7 +352,7 @@ static void *msvc_reallocarray(void *ptr, size_t nmemb, size_t size) noexcept {
 # ifndef MAY_OVERRIDE_MEMALIGN
 #  define MAY_SUPPORT_MEMALIGN 0
 # endif
-# define RETURN_ADDRESS ((void *)1)
+# define RETURN_ADDRESS (std::vector<void *>{1})
 # define CSTDLIB_NOEXCEPT
 #endif
 

@@ -34,8 +34,8 @@ struct LifeBlock {
     uint32_t end_tid;
     void *ptr;
     size_t size;
-    void *start_caller;
-    void *end_caller;
+    std::vector<void *> start_call_stack;
+    std::vector<void *> end_call_stack;
     int64_t start_time;
     int64_t end_time;
 };
@@ -131,7 +131,7 @@ struct SvgWriter {
     }
 
     void text(double x, double y, std::string const &color,
-              std::string const &alignment, std::string const &text) {
+              std::string const &alignment, std::string const &text, std::string const &title) {
         x += margin;
         // HTML escape text:
         std::string html;
@@ -146,8 +146,21 @@ struct SvgWriter {
             default:   html += c; break;
             }
         }
+        std::string html_title;
+        html_title.reserve(title.size());
+        for (auto c: title) {
+            switch (c) {
+            case '&':  html_title += "&amp;"; break;
+            case '<':  html_title += "&lt;"; break;
+            case '>':  html_title += "&gt;"; break;
+            case '"':  html_title += "&quot;"; break;
+            case '\'': html_title += "&apos;"; break;
+            default:   html_title += c; break;
+            }
+        }
         out << "<text x=\"" << x << "\" y=\"" << y << "\" fill=\"" << color
-            << "\"" << alignment << ">" << html << "</text>\n";
+            << "\"" << alignment << ">" << "<title>" << html_title << "</title>" 
+            << html << "</text>\n";
     }
 
     SvgWriter(SvgWriter &&) = delete;
@@ -470,15 +483,15 @@ void mallocvis_plot_alloc_actions(std::vector<AllocAction> actions) {
         if (kAllocOpIsAllocation[(size_t)action.op]) {
             living.insert({action.ptr,
                            {action.op, action.op, action.tid, action.tid,
-                            action.ptr, action.size, action.caller,
-                            action.caller, action.time, action.time}});
+                            action.ptr, action.size, action.call_stack,
+                            action.call_stack, action.time, action.time}});
         } else {
             auto it = living.find(action.ptr);
             if (it != living.end()) {
                 it->second.end_op = action.op;
                 it->second.end_tid = action.tid;
                 it->second.end_time = action.time;
-                it->second.end_caller = action.caller;
+                it->second.end_call_stack = action.call_stack;
                 dead.insert(it->second);
                 living.erase(it);
             }
@@ -513,10 +526,10 @@ void mallocvis_plot_alloc_actions(std::vector<AllocAction> actions) {
         if (block.end_time > block.start_time) {
             end_time = std::max(end_time, block.end_time);
         }
-        start_caller = std::min(start_caller, (uintptr_t)block.start_caller);
-        end_caller = std::max(end_caller, (uintptr_t)block.start_caller);
-        start_caller = std::min(start_caller, (uintptr_t)block.end_caller);
-        end_caller = std::max(end_caller, (uintptr_t)block.end_caller);
+        start_caller = std::min(start_caller, (uintptr_t)block.start_call_stack[0]);
+        end_caller = std::max(end_caller, (uintptr_t)block.start_call_stack[0]);
+        start_caller = std::min(start_caller, (uintptr_t)block.end_call_stack[0]);
+        end_caller = std::max(end_caller, (uintptr_t)block.end_call_stack[0]);
         start_ptr = std::min(start_ptr, (uintptr_t)block.ptr);
         end_ptr = std::max(end_ptr, (uintptr_t)block.ptr + block.size);
         tids.insert({block.start_tid, tids.size()});
@@ -527,11 +540,11 @@ void mallocvis_plot_alloc_actions(std::vector<AllocAction> actions) {
     for (auto &[_, block]: living) {
         start_time = std::min(start_time, block.start_time);
         block.end_time = end_time;
-        block.end_caller = nullptr;
-        start_caller = std::min(start_caller, (uintptr_t)block.start_caller);
-        end_caller = std::max(end_caller, (uintptr_t)block.start_caller);
-        start_caller = std::min(start_caller, (uintptr_t)block.end_caller);
-        end_caller = std::max(end_caller, (uintptr_t)block.end_caller);
+        block.end_call_stack[0] = nullptr;
+        start_caller = std::min(start_caller, (uintptr_t)block.start_call_stack[0]);
+        end_caller = std::max(end_caller, (uintptr_t)block.start_call_stack[0]);
+        start_caller = std::min(start_caller, (uintptr_t)block.end_call_stack[0]);
+        end_caller = std::max(end_caller, (uintptr_t)block.end_call_stack[0]);
         start_ptr = std::min(start_ptr, (uintptr_t)block.ptr);
         end_ptr = std::max(end_ptr, (uintptr_t)block.ptr + block.size);
         tids.insert({block.start_tid, tids.size()});
@@ -562,10 +575,10 @@ void mallocvis_plot_alloc_actions(std::vector<AllocAction> actions) {
             double z0 = 0;
             double z1 = 0;
             if (options.z_indicates == PlotOptions::Caller) {
-                z0 = ((uintptr_t)block.start_caller - start_caller) *
+                z0 = ((uintptr_t)block.start_call_stack[0] - start_caller) *
                      caller_scale;
                 z1 =
-                    ((uintptr_t)block.end_caller - start_caller) * caller_scale;
+                    ((uintptr_t)block.end_call_stack[0] - start_caller) * caller_scale;
             } else if (options.z_indicates == PlotOptions::Thread) {
                 z0 = tids.at(block.start_tid);
                 z1 = tids.at(block.end_tid);
@@ -600,8 +613,8 @@ void mallocvis_plot_alloc_actions(std::vector<AllocAction> actions) {
         for (auto const &block: dead) {
             double height = eval_height(block);
             total_height += height;
-            callers.insert(block.start_caller);
-            callers.insert(block.end_caller);
+            callers.insert(block.start_call_stack[0]);
+            callers.insert(block.end_call_stack[0]);
         }
         if (options.layout == PlotOptions::Address) {
             total_height = end_ptr - start_ptr;
@@ -634,13 +647,13 @@ void mallocvis_plot_alloc_actions(std::vector<AllocAction> actions) {
 
         auto eval_color =
             [&](LifeBlock const &block) -> std::pair<std::string, std::string> {
-            return {caller_color(block.start_caller),
-                    caller_color(block.end_caller)};
+            return {caller_color(block.start_call_stack[0]),
+                    caller_color(block.end_call_stack[0])};
         };
 
         auto eval_text =
-            [](LifeBlock const &block) -> std::pair<std::string, std::string> {
-            return {addr2sym(block.start_caller), addr2sym(block.end_caller)};
+            [](LifeBlock const &block) -> std::pair<std::vector<std::string>, std::vector<std::string>> {
+            return {addrList2symList(block.start_call_stack), addrList2symList(block.end_call_stack)};
         };
 
         SvgWriter svg(options.path.empty() ? "malloc.html" : options.path,
@@ -669,12 +682,18 @@ void mallocvis_plot_alloc_actions(std::vector<AllocAction> actions) {
                             fontHeight1 *=
                                 max_width / (fontHeight * 0.5 * text1.size());
                         }
+                        std::string title;
+                        for(auto &ti : text1)
+                        {
+                            title += ti;
+                            title += '\n';
+                        }
                         svg.text(
                             x, y + height * 0.5, color1,
                             " style=\"dominant-baseline:central;text-anchor:"
                             "end;font-size:" +
                                 std::to_string(fontHeight1) + "px;\"",
-                            text1);
+                            text1[0], title);
                     }
                     if (!text2.empty()) {
                         auto max_width =
@@ -684,12 +703,18 @@ void mallocvis_plot_alloc_actions(std::vector<AllocAction> actions) {
                             fontHeight1 *=
                                 max_width / (fontHeight * 0.5 * text2.size());
                         }
+                        std::string title;
+                        for(auto &ti : text2)
+                        {
+                            title += ti;
+                            title += '\n';
+                        }
                         svg.text(
                             x + width, y + height * 0.5, color2,
                             " style=\"dominant-baseline:central;text-anchor:"
                             "start;font-size:" +
                                 std::to_string(fontHeight1) + "px;\"",
-                            text2);
+                            text2[0], title);
                     }
                 }
             }
@@ -714,12 +739,18 @@ void mallocvis_plot_alloc_actions(std::vector<AllocAction> actions) {
                             fontHeight1 *=
                                 max_width / (fontHeight * 0.5 * text1.size());
                         }
+                        std::string title;
+                        for(auto &ti : text1)
+                        {
+                            title += ti;
+                            title += '\n';
+                        }
                         svg.text(
                             x, y + height * 0.5, color1,
                             " style=\"dominant-baseline:central;text-anchor:"
                             "end;font-size:" +
                                 std::to_string(fontHeight1) + "px;\"",
-                            text1);
+                            text1[0], title);
                     }
                     if (!text2.empty()) {
                         auto max_width =
@@ -729,12 +760,18 @@ void mallocvis_plot_alloc_actions(std::vector<AllocAction> actions) {
                             fontHeight1 *=
                                 max_width / (fontHeight * 0.5 * text2.size());
                         }
+                        std::string title;
+                        for(auto &ti : text2)
+                        {
+                            title += ti;
+                            title += '\n';
+                        }
                         svg.text(
                             x + width, y + height * 0.5, color2,
                             " style=\"dominant-baseline:central;text-anchor:"
                             "start;font-size:" +
                                 std::to_string(fontHeight1) + "px;\"",
-                            text2);
+                            text2[0], title);
                     }
                 }
                 y += height;
